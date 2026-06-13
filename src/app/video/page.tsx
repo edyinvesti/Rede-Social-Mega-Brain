@@ -19,6 +19,11 @@ const DEFAULT_FORMAT =
 
 function pickMimeType(): string | undefined {
   const candidates = [
+    "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+    "video/mp4;codecs=avc1,mp4a.40.2",
+    "video/mp4;codecs=avc1,opus",
+    "video/mp4;codecs=avc1",
+    "video/mp4",
     "video/webm;codecs=vp9,opus",
     "video/webm;codecs=vp8,opus",
     "video/webm",
@@ -215,10 +220,13 @@ export default function VideoPage() {
       video.addEventListener("ended", onEnded, { once: true });
       await stopped;
       video.removeEventListener("ended", onEnded);
-      const blob = new Blob(chunks, { type: mimeType || "video/webm" });
+      const recordedType = recorder.mimeType || mimeType || "video/webm";
+      const isMp4 = recordedType.includes("mp4");
+      const blob = new Blob(chunks, { type: recordedType });
+      const ext = isMp4 ? "mp4" : "webm";
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.download = `${brand.brandName || "video"}-${format.id}.webm`;
+      link.download = `${brand.brandName || "video"}-${format.id}.${ext}`;
       link.href = url;
       link.click();
       URL.revokeObjectURL(url);
