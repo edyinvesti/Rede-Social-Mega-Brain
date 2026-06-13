@@ -24,6 +24,17 @@ export default function CreatePage() {
   const [provider, setProvider] = useState<string | null>(null);
   const [post, setPost] = useState<GeneratedPost | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<"caption" | "hashtags" | null>(null);
+
+  const copyText = async (text: string, which: "caption" | "hashtags") => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(which);
+      setTimeout(() => setCopied(null), 1500);
+    } catch {
+      setError("Não foi possível copiar. Copie manualmente.");
+    }
+  };
 
   useEffect(() => {
     if (ready && !brand.completed) {
@@ -57,6 +68,7 @@ export default function CreatePage() {
         body: JSON.stringify({
           topic,
           formatName: format.name,
+          network: format.network,
           brand: {
             brandName: brand.brandName,
             brandDescription: brand.brandDescription,
@@ -76,6 +88,8 @@ export default function CreatePage() {
         highlight: copy.highlight,
         body: copy.body,
         cta: copy.cta,
+        caption: copy.caption,
+        hashtags: copy.hashtags,
         createdAt: Date.now(),
       });
     } catch {
@@ -243,6 +257,58 @@ export default function CreatePage() {
                 >
                   Salvar
                 </button>
+              </div>
+            )}
+
+            {post?.caption && (
+              <div className="mt-5 border-t border-border pt-5">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">
+                    Legenda para {NETWORK_LABELS[format.network]}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => copyText(post.caption ?? "", "caption")}
+                    className="text-xs font-medium text-brand-2 transition hover:opacity-80"
+                  >
+                    {copied === "caption" ? "Copiado!" : "Copiar"}
+                  </button>
+                </div>
+                <p className="mt-2 whitespace-pre-line rounded-xl border border-border bg-surface-2 p-3 text-sm text-muted">
+                  {post.caption}
+                </p>
+
+                {post.hashtags && post.hashtags.length > 0 && (
+                  <>
+                    <div className="mt-4 flex items-center justify-between">
+                      <p className="text-sm font-medium">Hashtags</p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          copyText(
+                            (post.hashtags ?? [])
+                              .map((h) => `#${h}`)
+                              .join(" "),
+                            "hashtags",
+                          )
+                        }
+                        className="text-xs font-medium text-brand-2 transition hover:opacity-80"
+                      >
+                        {copied === "hashtags" ? "Copiado!" : "Copiar"}
+                      </button>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {post.hashtags.map((h) => (
+                        <span
+                          key={h}
+                          className="rounded-full border border-border bg-surface-2 px-2.5 py-1 text-xs text-brand-2"
+                        >
+                          #{h}
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>

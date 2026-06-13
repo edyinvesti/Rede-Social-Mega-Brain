@@ -81,5 +81,7 @@ export interface GeneratedPost {
   highlight: string;
   body: string;
   cta: string;
+  caption?: string;
+  hashtags?: string[];
   createdAt: number;
 }

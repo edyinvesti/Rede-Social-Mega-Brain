@@ -1,8 +1,10 @@
-import type { BrandProfile } from "./types";
+import type { BrandProfile, SocialNetwork } from "./types";
+import { NETWORK_LABELS } from "./types";
 
 export interface CopyRequest {
   topic: string;
   formatName: string;
+  network: SocialNetwork;
   brand: Pick<
     BrandProfile,
     | "brandName"
@@ -18,10 +20,10 @@ export interface CopyResult {
   highlight: string;
   body: string;
   cta: string;
+  caption: string;
+  hashtags: string[];
   source: "ai" | "stub";
 }
-
-export type AiProvider = "gemini" | "openai" | null;
 
 const OBJECTIVE_CTA: Record<string, string> = {
   vendas: "Garanta o seu agora",
@@ -30,6 +32,39 @@ const OBJECTIVE_CTA: Record<string, string> = {
   leads: "Clique no link da bio",
   trafego: "Acesse agora pelo link da bio",
 };
+
+/** Per-network guidance so the caption matches each platform's style. */
+const NETWORK_CAPTION_STYLE: Record<SocialNetwork, string> = {
+  instagram:
+    "Instagram: legenda envolvente com 1 gancho na 1a linha, emojis com moderação e uma chamada para ação.",
+  facebook:
+    "Facebook: legenda clara e um pouco mais longa, tom conversacional, pode incluir pergunta para gerar comentários.",
+  linkedin:
+    "LinkedIn: tom profissional e de autoridade, sem gírias, foco em valor e insight; emojis raríssimos.",
+  whatsapp:
+    "WhatsApp Status: mensagem curta e direta, pessoal, como se falasse com um amigo; pode usar emojis.",
+  tiktok:
+    "TikTok: tom informal e jovem, ganchos fortes, linguagem de tendência, emojis à vontade.",
+  youtube:
+    "YouTube Shorts: descrição curta e chamativa que estimula o clique e a inscrição no canal.",
+  kwai:
+    "Kwai: tom popular e descontraído, direto ao ponto, com apelo emocional e emojis.",
+  x:
+    "X (Twitter): texto curto e impactante (até ~200 caracteres), tom afiado, pode ter 1 a 2 hashtags no fim.",
+  pinterest:
+    "Pinterest: descrição inspiradora e descritiva, rica em palavras-chave de busca, foco em ideias e dicas.",
+};
+
+/** Sensible default hashtags per objective, used by the demo/stub mode. */
+const OBJECTIVE_HASHTAGS: Record<string, string[]> = {
+  vendas: ["oferta", "promocao", "compreonline"],
+  autoridade: ["dicas", "especialista", "conteudo"],
+  engajamento: ["comunidade", "vempraca", "interaja"],
+  leads: ["novidade", "saibamais", "cadastrese"],
+  trafego: ["linknabio", "acesseja", "saibamais"],
+};
+
+export type AiProvider = "gemini" | "openai" | null;
 
 const SYSTEM_PROMPT =
   "Você é um redator publicitário especialista em conteúdo para redes sociais no Brasil. " +
@@ -51,11 +86,16 @@ Objetivo: ${req.brand.objective}
 Público-alvo: ${req.brand.audience}
 Tom de voz: ${req.brand.toneOfVoice}
 
+Rede social de destino: ${NETWORK_LABELS[req.network]}
+Estilo da legenda para esta rede: ${NETWORK_CAPTION_STYLE[req.network]}
+
 Retorne um JSON com as chaves:
 - "headline": título principal curto (até 6 palavras)
 - "highlight": 1 a 2 palavras do título que devem ser destacadas em cor
 - "body": texto de apoio (até 220 caracteres)
-- "cta": chamada para ação curta`;
+- "cta": chamada para ação curta
+- "caption": legenda pronta para publicar na rede ${NETWORK_LABELS[req.network]}, no estilo descrito acima (não inclua as hashtags dentro da legenda)
+- "hashtags": array de 5 a 8 hashtags relevantes para o tema e a rede, sem o caractere "#" e sem espaços`;
 }
 
 function buildStub(req: CopyRequest): CopyResult {
@@ -70,18 +110,39 @@ function buildStub(req: CopyRequest): CopyResult {
     headlineWords.length >= 2
       ? headlineWords.slice(-2).join(" ")
       : headlineWords[0];
+  const body = `${
+    req.brand.brandDescription ||
+    "Soluções pensadas para gerar resultado de verdade."
+  } Conteúdo de ${brandName} para ${req.brand.audience || "o seu público"}.`;
+  const cta = OBJECTIVE_CTA[req.brand.objective] ?? "Saiba mais";
   return {
     headline,
     highlight,
-    body: `${
-      req.brand.brandDescription ||
-      "Soluções pensadas para gerar resultado de verdade."
-    } Conteúdo de ${brandName} para ${
-      req.brand.audience || "o seu público"
-    }.`,
-    cta: OBJECTIVE_CTA[req.brand.objective] ?? "Saiba mais",
+    body,
+    cta,
+    caption: `${headline} — ${body} ${cta}.`,
+    hashtags: buildStubHashtags(req),
     source: "stub",
   };
+}
+
+function buildStubHashtags(req: CopyRequest): string[] {
+  const slug = (s: string) =>
+    s
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+  const brandTag = slug(req.brand.brandName);
+  const topicTags = req.topic
+    .split(/\s+/)
+    .map(slug)
+    .filter((w) => w.length > 3)
+    .slice(0, 3);
+  const base = OBJECTIVE_HASHTAGS[req.brand.objective] ?? ["conteudo"];
+  return Array.from(
+    new Set([...(brandTag ? [brandTag] : []), ...topicTags, ...base]),
+  ).slice(0, 8);
 }
 
 function capitalize(s: string): string {
@@ -93,11 +154,18 @@ function mergeWithStub(
   req: CopyRequest,
 ): CopyResult {
   const stub = buildStub(req);
+  const hashtags = Array.isArray(parsed.hashtags)
+    ? parsed.hashtags
+        .map((h) => String(h).replace(/^#/, "").trim())
+        .filter(Boolean)
+    : [];
   return {
     headline: parsed.headline?.trim() || stub.headline,
     highlight: parsed.highlight?.trim() || stub.highlight,
     body: parsed.body?.trim() || stub.body,
     cta: parsed.cta?.trim() || stub.cta,
+    caption: parsed.caption?.trim() || stub.caption,
+    hashtags: hashtags.length > 0 ? hashtags : stub.hashtags,
     source: "ai",
   };
 }
