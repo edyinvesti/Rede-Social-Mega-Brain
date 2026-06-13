@@ -6,7 +6,8 @@ import { useBrand } from "@/lib/brand-context";
 import { PALETTES } from "@/lib/palettes";
 import { FONT_OPTIONS } from "@/lib/defaults";
 import { fileToDataUrl, LogoTooLargeError } from "@/lib/logo-upload";
-import type { Objective } from "@/lib/types";
+import type { Objective, SocialNetwork } from "@/lib/types";
+import { NETWORK_LABELS } from "@/lib/types";
 
 const STEPS = [
   "Objetivo",
@@ -314,8 +315,8 @@ export default function OnboardingPage() {
               title="Conecte suas redes sociais"
               subtitle="Você pode pular esta etapa e conectar depois."
             >
-              <div className="grid gap-3">
-                {(["instagram", "facebook", "linkedin"] as const).map((n) => (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {(Object.keys(NETWORK_LABELS) as SocialNetwork[]).map((n) => (
                   <button
                     key={n}
                     type="button"
@@ -333,7 +334,7 @@ export default function OnboardingPage() {
                         : "border-border bg-surface-2 hover:border-brand-2/50"
                     }`}
                   >
-                    <span className="font-medium capitalize">{n}</span>
+                    <span className="font-medium">{NETWORK_LABELS[n]}</span>
                     <span className="text-sm text-muted">
                       {brand.connections[n] ? "Conectado" : "Conectar"}
                     </span>

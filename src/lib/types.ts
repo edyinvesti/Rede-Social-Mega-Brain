@@ -35,18 +35,31 @@ export interface BrandProfile {
   fontHeading: string;
   fontBody: string;
   /** Step 6 - Conexões */
-  connections: {
-    instagram: boolean;
-    facebook: boolean;
-    linkedin: boolean;
-  };
+  connections: Partial<Record<SocialNetwork, boolean>>;
 }
 
 export type SocialNetwork =
   | "instagram"
   | "facebook"
   | "linkedin"
-  | "whatsapp";
+  | "whatsapp"
+  | "tiktok"
+  | "youtube"
+  | "kwai"
+  | "x"
+  | "pinterest";
+
+export const NETWORK_LABELS: Record<SocialNetwork, string> = {
+  instagram: "Instagram",
+  facebook: "Facebook",
+  linkedin: "LinkedIn",
+  whatsapp: "WhatsApp",
+  tiktok: "TikTok",
+  youtube: "YouTube",
+  kwai: "Kwai",
+  x: "X (Twitter)",
+  pinterest: "Pinterest",
+};
 
 export interface ContentFormat {
   id: string;

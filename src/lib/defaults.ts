@@ -27,6 +27,12 @@ export const DEFAULT_BRAND: BrandProfile = {
     instagram: false,
     facebook: false,
     linkedin: false,
+    whatsapp: false,
+    tiktok: false,
+    youtube: false,
+    kwai: false,
+    x: false,
+    pinterest: false,
   },
 };
 
