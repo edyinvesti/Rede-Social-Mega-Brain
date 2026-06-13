@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toPng } from "html-to-image";
+import JSZip from "jszip";
 import { AppNav } from "@/components/AppNav";
 import { PosterPreview } from "@/components/PosterPreview";
 import { useBrand } from "@/lib/brand-context";
@@ -15,11 +16,13 @@ export default function CreatePage() {
   const router = useRouter();
   const { brand, ready, addPost } = useBrand();
   const posterRef = useRef<HTMLDivElement>(null);
+  const exportRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const [formatId, setFormatId] = useState(FORMATS[0].id);
   const [topic, setTopic] = useState("");
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [downloadingAll, setDownloadingAll] = useState(false);
   const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
   const [provider, setProvider] = useState<string | null>(null);
   const [post, setPost] = useState<GeneratedPost | null>(null);
@@ -114,6 +117,42 @@ export default function CreatePage() {
       link.click();
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const downloadAll = async () => {
+    if (!post) return;
+    setDownloadingAll(true);
+    try {
+      const zip = new JSZip();
+      for (const f of FORMATS) {
+        const node = exportRefs.current[f.id];
+        if (!node) continue;
+        const scale = f.width / node.offsetWidth;
+        const dataUrl = await toPng(node, { pixelRatio: scale, cacheBust: true });
+        const base64 = dataUrl.split(",")[1];
+        zip.file(
+          `${NETWORK_LABELS[f.network]}/${brand.brandName || "post"}-${f.id}.png`,
+          base64,
+          { base64: true },
+        );
+      }
+      if (post.caption) {
+        const hashtags = (post.hashtags ?? []).map((h) => `#${h}`).join(" ");
+        zip.file(
+          "legenda.txt",
+          `Legenda (${NETWORK_LABELS[format.network]}):\n${post.caption}\n\nHashtags:\n${hashtags}\n`,
+        );
+      }
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.download = `${brand.brandName || "post"}-todas-as-redes.zip`;
+      link.href = url;
+      link.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloadingAll(false);
     }
   };
 
@@ -260,6 +299,19 @@ export default function CreatePage() {
               </div>
             )}
 
+            {post && (
+              <button
+                type="button"
+                onClick={downloadAll}
+                disabled={downloadingAll}
+                className="mt-3 w-full rounded-xl border border-brand bg-brand/10 px-4 py-2.5 text-sm font-semibold text-brand-2 transition hover:bg-brand/20 disabled:opacity-50"
+              >
+                {downloadingAll
+                  ? "Gerando pacote..."
+                  : "⬇ Baixar para todas as redes (.zip)"}
+              </button>
+            )}
+
             {post?.caption && (
               <div className="mt-5 border-t border-border pt-5">
                 <div className="flex items-center justify-between">
@@ -314,6 +366,32 @@ export default function CreatePage() {
           </div>
         </div>
       </div>
+
+      {post && (
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            left: -99999,
+            top: 0,
+            opacity: 0,
+            pointerEvents: "none",
+          }}
+        >
+          {FORMATS.map((f) => (
+            <PosterPreview
+              key={f.id}
+              ref={(el) => {
+                exportRefs.current[f.id] = el;
+              }}
+              brand={brand}
+              post={post}
+              format={f}
+              width={400}
+            />
+          ))}
+        </div>
+      )}
     </main>
   );
 }
