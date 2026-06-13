@@ -41,7 +41,7 @@ exemplo). Defina as variáveis em um arquivo `.env.local` (veja `.env.example`):
 ```
 # Google Gemini (camada gratuita) — https://aistudio.google.com/apikey
 GEMINI_API_KEY=...
-GEMINI_MODEL=gemini-1.5-flash   # opcional
+GEMINI_MODEL=gemini-2.5-flash   # opcional
 
 # OpenAI — https://platform.openai.com/api-keys
 OPENAI_API_KEY=sk-...

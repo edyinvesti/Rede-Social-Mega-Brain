@@ -145,7 +145,11 @@ export default function CreatePage() {
                 <button
                   key={f.id}
                   type="button"
-                  onClick={() => setFormatId(f.id)}
+                  onClick={() => {
+                    setFormatId(f.id);
+                    // Avoid preview/download diverging from the post's format.
+                    setPost(null);
+                  }}
                   className={`rounded-xl border p-3 text-left transition ${
                     formatId === f.id
                       ? "border-brand bg-brand/10"

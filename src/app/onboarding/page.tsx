@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useBrand } from "@/lib/brand-context";
 import { PALETTES } from "@/lib/palettes";
 import { FONT_OPTIONS } from "@/lib/defaults";
-import { fileToDataUrl } from "@/lib/logo-upload";
+import { fileToDataUrl, LogoTooLargeError } from "@/lib/logo-upload";
 import type { Objective } from "@/lib/types";
 
 const STEPS = [
@@ -29,6 +29,7 @@ export default function OnboardingPage() {
   const router = useRouter();
   const { brand, updateBrand } = useBrand();
   const [step, setStep] = useState(0);
+  const [logoError, setLogoError] = useState<string | null>(null);
 
   const canContinue = useMemo(() => {
     switch (step) {
@@ -55,8 +56,17 @@ export default function OnboardingPage() {
 
   const handleLogo = async (file: File | undefined) => {
     if (!file) return;
-    const dataUrl = await fileToDataUrl(file);
-    updateBrand({ logoDataUrl: dataUrl });
+    setLogoError(null);
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      updateBrand({ logoDataUrl: dataUrl });
+    } catch (err) {
+      setLogoError(
+        err instanceof LogoTooLargeError
+          ? err.message
+          : "Não foi possível carregar o logo. Tente outra imagem.",
+      );
+    }
   };
 
   return (
@@ -182,6 +192,9 @@ export default function OnboardingPage() {
                     />
                   </label>
                 </div>
+                {logoError && (
+                  <p className="mt-2 text-sm text-red-400">{logoError}</p>
+                )}
               </Field>
             </Section>
           )}

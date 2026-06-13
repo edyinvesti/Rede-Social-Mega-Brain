@@ -2,6 +2,8 @@
 
 import { forwardRef } from "react";
 import type { BrandProfile, ContentFormat, GeneratedPost } from "@/lib/types";
+import { contrastColor } from "@/lib/palettes";
+import { fontStack } from "@/lib/fonts";
 
 interface PosterPreviewProps {
   brand: BrandProfile;
@@ -21,6 +23,7 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
     const height = (width * format.height) / format.width;
     const u = width / 100; // 1 unit = 1% of width
     const { palette } = brand;
+    const onPrimary = contrastColor(palette.primary);
 
     const renderHeadline = () => {
       const headline = post.headline;
@@ -49,7 +52,7 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
           height,
           background: `linear-gradient(155deg, ${palette.background} 0%, ${palette.primary}33 60%, ${palette.secondary}55 100%)`,
           color: palette.text,
-          fontFamily: brand.fontBody,
+          fontFamily: fontStack(brand.fontBody),
           position: "relative",
           overflow: "hidden",
           display: "flex",
@@ -119,7 +122,7 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
                 justifyContent: "center",
                 fontWeight: 800,
                 fontSize: u * 6,
-                color: palette.text,
+                color: onPrimary,
               }}
             >
               {(brand.brandName || "M").charAt(0).toUpperCase()}
@@ -140,7 +143,7 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
         <div style={{ position: "relative" }}>
           <h1
             style={{
-              fontFamily: brand.fontHeading,
+              fontFamily: fontStack(brand.fontHeading),
               fontWeight: 800,
               fontSize: u * 11,
               lineHeight: 1.05,
@@ -178,7 +181,7 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
             style={{
               display: "inline-block",
               background: palette.primary,
-              color: palette.text,
+              color: onPrimary,
               fontWeight: 700,
               fontSize: u * 4,
               padding: `${u * 3}px ${u * 5}px`,
