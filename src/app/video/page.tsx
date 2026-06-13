@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { upload } from "@vercel/blob/client";
 import { AppNav } from "@/components/AppNav";
 import { useBrand } from "@/lib/brand-context";
 import { FORMATS, getFormat } from "@/lib/formats";
@@ -49,6 +50,13 @@ export default function VideoPage() {
   const [provider, setProvider] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<"caption" | "hashtags" | null>(null);
+  const [igStatus, setIgStatus] = useState<{
+    configured: boolean;
+    connected: boolean;
+    username: string | null;
+  } | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [igMessage, setIgMessage] = useState<string | null>(null);
 
   const format = getFormat(formatId) ?? FORMATS[0];
 
@@ -64,6 +72,25 @@ export default function VideoPage() {
         setProvider(d.provider ?? null);
       })
       .catch(() => setAiEnabled(false));
+  }, []);
+
+  useEffect(() => {
+    const ig = new URLSearchParams(window.location.search).get("ig");
+    if (ig) window.history.replaceState({}, "", "/video");
+    fetch("/api/instagram/status")
+      .then((r) => r.json())
+      .then((d) => {
+        setIgStatus(d);
+        if (ig === "connected") setIgMessage("Instagram conectado!");
+        else if (ig === "noaccount")
+          setIgMessage(
+            "Nenhuma conta Instagram Profissional ligada a uma Página do Facebook foi encontrada.",
+          );
+        else if (ig === "denied") setIgMessage("Conexão cancelada.");
+        else if (ig === "error")
+          setIgMessage("Falha ao conectar. Tente de novo.");
+      })
+      .catch(() => setIgStatus(null));
   }, []);
 
   // Load the brand logo as an image for canvas drawing. The continuous draw
@@ -185,48 +212,52 @@ export default function VideoPage() {
     void v.play();
   };
 
-  const exportVideo = async () => {
+  const recordVideo = async (): Promise<{ blob: Blob; ext: string } | null> => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas) return;
+    if (!video || !canvas) return null;
+    if ("fonts" in document) await document.fonts.ready;
+    const fps = 30;
+    const stream = canvas.captureStream(fps);
+    const cap = video as MediaElementWithCapture;
+    video.muted = false;
+    if (cap.captureStream) {
+      const vs = cap.captureStream();
+      vs.getAudioTracks().forEach((t) => stream.addTrack(t));
+    }
+    const mimeType = pickMimeType();
+    const recorder = new MediaRecorder(
+      stream,
+      mimeType ? { mimeType } : undefined,
+    );
+    const chunks: BlobPart[] = [];
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
+    const stopped = new Promise<void>((resolve) => {
+      recorder.onstop = () => resolve();
+    });
+    video.loop = false;
+    video.currentTime = 0;
+    await video.play();
+    recorder.start();
+    const onEnded = () => recorder.stop();
+    video.addEventListener("ended", onEnded, { once: true });
+    await stopped;
+    video.removeEventListener("ended", onEnded);
+    const recordedType = recorder.mimeType || mimeType || "video/webm";
+    const ext = recordedType.includes("mp4") ? "mp4" : "webm";
+    return { blob: new Blob(chunks, { type: recordedType }), ext };
+  };
+
+  const exportVideo = async () => {
     setExporting(true);
     try {
-      if ("fonts" in document) await document.fonts.ready;
-      const fps = 30;
-      const stream = canvas.captureStream(fps);
-      const cap = video as MediaElementWithCapture;
-      video.muted = false;
-      if (cap.captureStream) {
-        const vs = cap.captureStream();
-        vs.getAudioTracks().forEach((t) => stream.addTrack(t));
-      }
-      const mimeType = pickMimeType();
-      const recorder = new MediaRecorder(
-        stream,
-        mimeType ? { mimeType } : undefined,
-      );
-      const chunks: BlobPart[] = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
-      const stopped = new Promise<void>((resolve) => {
-        recorder.onstop = () => resolve();
-      });
-      video.loop = false;
-      video.currentTime = 0;
-      await video.play();
-      recorder.start();
-      const onEnded = () => recorder.stop();
-      video.addEventListener("ended", onEnded, { once: true });
-      await stopped;
-      video.removeEventListener("ended", onEnded);
-      const recordedType = recorder.mimeType || mimeType || "video/webm";
-      const isMp4 = recordedType.includes("mp4");
-      const blob = new Blob(chunks, { type: recordedType });
-      const ext = isMp4 ? "mp4" : "webm";
-      const url = URL.createObjectURL(blob);
+      const result = await recordVideo();
+      if (!result) return;
+      const url = URL.createObjectURL(result.blob);
       const link = document.createElement("a");
-      link.download = `${brand.brandName || "video"}-${format.id}.${ext}`;
+      link.download = `${brand.brandName || "video"}-${format.id}.${result.ext}`;
       link.href = url;
       link.click();
       URL.revokeObjectURL(url);
@@ -234,6 +265,48 @@ export default function VideoPage() {
       setError("Não foi possível exportar o vídeo. Tente um arquivo menor.");
     } finally {
       setExporting(false);
+    }
+  };
+
+  const connectInstagram = () => {
+    window.location.href = "/api/instagram/login";
+  };
+
+  const publishToInstagram = async () => {
+    if (!post) return;
+    setIgMessage(null);
+    setPublishing(true);
+    try {
+      const result = await recordVideo();
+      if (!result) return;
+      const fileName = `${brand.brandName || "video"}-${format.id}-${Date.now()}.${result.ext}`;
+      const file = new File([result.blob], fileName, {
+        type: result.blob.type,
+      });
+      const { url } = await upload(fileName, file, {
+        access: "public",
+        handleUploadUrl: "/api/blob/upload",
+      });
+      const caption = [
+        post.caption,
+        post.hashtags.map((h) => `#${h}`).join(" "),
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+      const res = await fetch("/api/instagram/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoUrl: url, caption }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error || "Falha ao publicar.");
+      setIgMessage("Publicado no Instagram! 🎉");
+    } catch (err) {
+      setIgMessage(
+        err instanceof Error ? err.message : "Falha ao publicar no Instagram.",
+      );
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -391,6 +464,41 @@ export default function VideoPage() {
                   {exporting ? "Exportando..." : "⬇ Exportar vídeo"}
                 </button>
               </div>
+            )}
+
+            {videoUrl && igStatus?.configured && (
+              <div className="mt-3">
+                {igStatus.connected ? (
+                  <button
+                    type="button"
+                    onClick={publishToInstagram}
+                    disabled={publishing || !post}
+                    className="w-full rounded-xl border border-brand-2/50 bg-brand-2/10 px-4 py-2.5 text-sm font-semibold text-brand-2 transition hover:bg-brand-2/20 disabled:opacity-50"
+                  >
+                    {publishing
+                      ? "Publicando no Instagram..."
+                      : `📷 Publicar no Instagram${igStatus.username ? " (@" + igStatus.username + ")" : ""}`}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={connectInstagram}
+                    className="w-full rounded-xl border border-border px-4 py-2.5 text-sm font-medium transition hover:border-brand-2/50"
+                  >
+                    🔗 Conectar Instagram
+                  </button>
+                )}
+                {!post && igStatus.connected && (
+                  <p className="mt-1 text-xs text-muted">
+                    Gere o texto antes de publicar.
+                  </p>
+                )}
+              </div>
+            )}
+            {igMessage && (
+              <p className="mt-2 text-center text-xs text-brand-2">
+                {igMessage}
+              </p>
             )}
 
             {post?.caption && (
