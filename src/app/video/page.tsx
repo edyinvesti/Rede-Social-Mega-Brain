@@ -39,6 +39,7 @@ export default function VideoPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const logoRef = useRef<HTMLImageElement | null>(null);
+  const shareCacheRef = useRef<{ key: string; file: File } | null>(null);
 
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [formatId, setFormatId] = useState(DEFAULT_FORMAT);
@@ -57,6 +58,7 @@ export default function VideoPage() {
   } | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [igMessage, setIgMessage] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
 
   const format = getFormat(formatId) ?? FORMATS[0];
 
@@ -268,6 +270,56 @@ export default function VideoPage() {
     }
   };
 
+  const shareVideo = async () => {
+    const captionText = post
+      ? [post.caption, post.hashtags.map((h) => `#${h}`).join(" ")]
+          .filter(Boolean)
+          .join("\n\n")
+      : "";
+    const key = `${formatId}|${videoUrl}|${post?.headline ?? ""}`;
+    try {
+      let file =
+        shareCacheRef.current?.key === key ? shareCacheRef.current.file : null;
+      if (!file) {
+        setSharing(true);
+        const result = await recordVideo();
+        if (!result) return;
+        file = new File(
+          [result.blob],
+          `${brand.brandName || "video"}-${format.id}.${result.ext}`,
+          { type: result.blob.type },
+        );
+        shareCacheRef.current = { key, file };
+        setSharing(false);
+      }
+      if (
+        typeof navigator.canShare === "function" &&
+        navigator.canShare({ files: [file] })
+      ) {
+        await navigator.share({
+          files: [file],
+          title: brand.brandName || "Meu vídeo",
+          text: captionText,
+        });
+        return;
+      }
+      const url = URL.createObjectURL(file);
+      const link = document.createElement("a");
+      link.download = file.name;
+      link.href = url;
+      link.click();
+      URL.revokeObjectURL(url);
+      setIgMessage(
+        "Seu navegador não tem compartilhamento direto — o vídeo foi baixado. Abra o app da rede e selecione o vídeo.",
+      );
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return;
+      setError("Não foi possível compartilhar. Tente exportar o vídeo.");
+    } finally {
+      setSharing(false);
+    }
+  };
+
   const connectInstagram = () => {
     window.location.href = "/api/instagram/login";
   };
@@ -459,11 +511,24 @@ export default function VideoPage() {
                   type="button"
                   onClick={exportVideo}
                   disabled={exporting}
-                  className="brand-gradient flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold transition hover:opacity-90 disabled:opacity-50"
+                  className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium transition hover:border-brand-2/50 disabled:opacity-50"
                 >
                   {exporting ? "Exportando..." : "⬇ Exportar vídeo"}
                 </button>
               </div>
+            )}
+
+            {videoUrl && (
+              <button
+                type="button"
+                onClick={shareVideo}
+                disabled={sharing}
+                className="brand-gradient mt-3 w-full rounded-xl px-4 py-2.5 text-sm font-semibold transition hover:opacity-90 disabled:opacity-50"
+              >
+                {sharing
+                  ? "Preparando vídeo..."
+                  : "📲 Compartilhar (WhatsApp, TikTok, Kwai…)"}
+              </button>
             )}
 
             {videoUrl && igStatus?.configured && (
