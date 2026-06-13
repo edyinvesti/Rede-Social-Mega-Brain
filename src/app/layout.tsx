@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import {
   Geist,
   Poppins,
@@ -54,6 +54,22 @@ export const metadata: Metadata = {
   title: "Content AI Studio — Conteúdo para redes sociais com IA",
   description:
     "Crie posts, carrosséis e stories com a identidade da sua marca em segundos, sem contratar designer.",
+  appleWebApp: {
+    capable: true,
+    title: "Content AI",
+    statusBarStyle: "black-translucent",
+  },
+  icons: {
+    icon: "/icon-192.png",
+    apple: "/apple-icon.png",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#7c3aed",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
