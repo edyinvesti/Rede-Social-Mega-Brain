@@ -34,14 +34,18 @@ Acesse http://localhost:3000.
 
 ## Configuração da IA
 
-Sem chave configurada, o app roda em **modo demo**: o texto é gerado por um
-modelo local de exemplo. Para usar a IA de verdade, defina as variáveis em um
-arquivo `.env.local` (veja `.env.example`):
+O app suporta dois provedores, com prioridade **Gemini → OpenAI → modo demo**.
+Sem nenhuma chave, roda em **modo demo** (texto gerado por modelo local de
+exemplo). Defina as variáveis em um arquivo `.env.local` (veja `.env.example`):
 
 ```
+# Google Gemini (camada gratuita) — https://aistudio.google.com/apikey
+GEMINI_API_KEY=...
+GEMINI_MODEL=gemini-1.5-flash   # opcional
+
+# OpenAI — https://platform.openai.com/api-keys
 OPENAI_API_KEY=sk-...
-# opcional
-OPENAI_MODEL=gpt-4o-mini
+OPENAI_MODEL=gpt-4o-mini        # opcional
 ```
 
 ## Estrutura

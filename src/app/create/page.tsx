@@ -20,6 +20,7 @@ export default function CreatePage() {
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
+  const [provider, setProvider] = useState<string | null>(null);
   const [post, setPost] = useState<GeneratedPost | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,7 +33,10 @@ export default function CreatePage() {
   useEffect(() => {
     fetch("/api/status")
       .then((r) => r.json())
-      .then((d) => setAiEnabled(Boolean(d.aiEnabled)))
+      .then((d) => {
+        setAiEnabled(Boolean(d.aiEnabled));
+        setProvider(d.provider ?? null);
+      })
       .catch(() => setAiEnabled(false));
   }, []);
 
@@ -123,8 +127,14 @@ export default function CreatePage() {
           {aiEnabled === false && (
             <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-300">
               Modo demo: sem chave de IA configurada, o texto é gerado por
-              modelo local de exemplo. Configure <code>OPENAI_API_KEY</code>{" "}
-              para textos gerados por IA.
+              modelo local de exemplo. Configure <code>GEMINI_API_KEY</code> ou{" "}
+              <code>OPENAI_API_KEY</code> para textos gerados por IA.
+            </div>
+          )}
+          {aiEnabled === true && provider && (
+            <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300">
+              IA ativa via{" "}
+              <span className="font-semibold capitalize">{provider}</span>.
             </div>
           )}
 
