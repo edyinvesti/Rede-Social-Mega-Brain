@@ -9,6 +9,7 @@ import { useBrand } from "@/lib/brand-context";
 import { FORMATS, getFormat } from "@/lib/formats";
 import type { CopyResult } from "@/lib/generate-copy";
 import type { GeneratedPost } from "@/lib/types";
+import { NETWORK_LABELS } from "@/lib/types";
 
 export default function CreatePage() {
   const router = useRouter();
@@ -164,6 +165,9 @@ export default function CreatePage() {
                       </span>
                     )}
                   </div>
+                  <span className="mt-0.5 block text-xs font-medium text-brand-2">
+                    {NETWORK_LABELS[f.network]}
+                  </span>
                   <span className="text-xs text-muted">{f.sizeLabel}</span>
                 </button>
               ))}
