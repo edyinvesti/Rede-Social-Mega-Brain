@@ -7,6 +7,7 @@ import { useBrand } from "@/lib/brand-context";
 const LINKS = [
   { href: "/dashboard", label: "Painel" },
   { href: "/create", label: "Criar" },
+  { href: "/video", label: "Vídeo" },
 ];
 
 export function AppNav() {
