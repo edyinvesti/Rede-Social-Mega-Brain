@@ -188,6 +188,46 @@ function CreatePageInner() {
     }
   };
 
+  const sharePost = async () => {
+    if (!posterRef.current || !post) return;
+    setDownloading(true); // Using downloading state to show progress
+    try {
+      const scale = format.width / posterRef.current.offsetWidth;
+      const dataUrl = await toPng(posterRef.current, {
+        pixelRatio: scale,
+        cacheBust: true,
+      });
+      
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const file = new File([blob], `${brand.brandName || "post"}.png`, { type: 'image/png' });
+      
+      const shareData = {
+        title: post.headline,
+        text: `${post.caption ?? ''}\n\n${(post.hashtags ?? []).map((h) => `#${h}`).join(' ')}`,
+        files: [file]
+      };
+      
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share(shareData);
+      } else if (navigator.share) {
+        // Fallback without file if file sharing is not supported
+        await navigator.share({
+          title: shareData.title,
+          text: shareData.text,
+        });
+      } else {
+        setError("O compartilhamento não é suportado neste navegador.");
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        setError("Erro ao compartilhar a imagem.");
+      }
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const downloadAll = async () => {
     if (!post) return;
     setDownloadingAll(true);
@@ -670,7 +710,15 @@ function CreatePageInner() {
                   disabled={downloading}
                   className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium transition hover:border-brand-2/50 disabled:opacity-50"
                 >
-                  {downloading ? "Baixando..." : "Baixar PNG"}
+                  {downloading ? "Aguarde..." : "Baixar PNG"}
+                </button>
+                <button
+                  type="button"
+                  onClick={sharePost}
+                  disabled={downloading}
+                  className="flex-1 rounded-xl border border-brand bg-brand/10 px-4 py-2.5 text-sm font-medium text-brand-2 transition hover:bg-brand/20 disabled:opacity-50"
+                >
+                  Compartilhar
                 </button>
                 <button
                   type="button"
