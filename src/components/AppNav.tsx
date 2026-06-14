@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/dashboard", label: "Painel" },
   { href: "/create", label: "Criar" },
   { href: "/video", label: "Vídeo" },
+  { href: "/calendar", label: "Pauta" },
 ];
 
 export function AppNav() {

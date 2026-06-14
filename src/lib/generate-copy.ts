@@ -451,3 +451,230 @@ export async function generateCarousel(
   }
   return buildCarouselStub(req);
 }
+
+// ---------------------------------------------------------------------------
+// Content calendar (weekly idea suggestions)
+// ---------------------------------------------------------------------------
+
+export interface CalendarRequest {
+  /** Niche label or free text (e.g. "Saúde & Bem-estar") */
+  niche: string;
+  /** Number of ideas/days to plan */
+  days: number;
+  /** Optional notable dates to weave in (commemorative dates near now) */
+  occasions?: string[];
+  brand: CopyRequest["brand"];
+}
+
+export interface CalendarIdea {
+  day: string;
+  title: string;
+  format: string;
+  network: SocialNetwork;
+}
+
+export interface CalendarResult {
+  ideas: CalendarIdea[];
+  source: "ai" | "stub";
+}
+
+const DAY_LABELS = [
+  "Segunda",
+  "Terça",
+  "Quarta",
+  "Quinta",
+  "Sexta",
+  "Sábado",
+  "Domingo",
+];
+
+const VALID_NETWORKS = new Set<SocialNetwork>([
+  "instagram",
+  "facebook",
+  "linkedin",
+  "whatsapp",
+  "tiktok",
+  "youtube",
+  "kwai",
+  "x",
+  "pinterest",
+]);
+
+function buildCalendarPrompt(req: CalendarRequest): string {
+  const occasions =
+    req.occasions && req.occasions.length > 0
+      ? `\nDatas comemorativas próximas para considerar quando fizer sentido: ${req.occasions.join(", ")}.`
+      : "";
+  return `Monte uma pauta de conteúdo com ${req.days} ideias de publicação para o nicho "${req.niche}".
+Marca: ${req.brand.brandName}
+Descrição da marca: ${req.brand.brandDescription}
+Objetivo: ${req.brand.objective}
+Público-alvo: ${req.brand.audience}
+Tom de voz: ${req.brand.toneOfVoice}${occasions}
+
+Regras:
+- Varie os ângulos (dica, bastidores, prova social, oferta, educativo, tendência).
+- Distribua entre formatos e redes diferentes para alcançar mais pessoas.
+- Cada ideia deve ser um tema específico e pronto para virar um post.
+
+Retorne um JSON com a chave "ideas": um array com exatamente ${req.days} itens, cada um com:
+- "day": dia da semana (ex: "Segunda")
+- "title": o tema/ideia do post (frase curta e específica)
+- "format": formato sugerido (ex: "Reels", "Carrossel", "Post único", "Stories")
+- "network": uma rede entre instagram, facebook, linkedin, whatsapp, tiktok, youtube, kwai, x, pinterest`;
+}
+
+function buildCalendarStub(req: CalendarRequest): CalendarResult {
+  const networks: SocialNetwork[] = [
+    "instagram",
+    "tiktok",
+    "instagram",
+    "linkedin",
+    "instagram",
+    "youtube",
+    "instagram",
+  ];
+  const formats = [
+    "Reels",
+    "Carrossel",
+    "Post único",
+    "Stories",
+    "Carrossel",
+    "Reels",
+    "Post único",
+  ];
+  const angles = [
+    "3 dicas rápidas sobre",
+    "Mito x verdade:",
+    "Bastidores do nosso trabalho com",
+    "O erro mais comum em",
+    "Passo a passo de",
+    "Antes e depois:",
+    "Pergunta para a audiência sobre",
+  ];
+  const ideas: CalendarIdea[] = [];
+  for (let i = 0; i < req.days; i++) {
+    ideas.push({
+      day: DAY_LABELS[i % DAY_LABELS.length],
+      title: `${angles[i % angles.length]} ${req.niche.toLowerCase()}`,
+      format: formats[i % formats.length],
+      network: networks[i % networks.length],
+    });
+  }
+  return { ideas, source: "stub" };
+}
+
+interface ParsedCalendar {
+  ideas?: Array<{
+    day?: unknown;
+    title?: unknown;
+    format?: unknown;
+    network?: unknown;
+  }>;
+}
+
+function mergeCalendar(raw: string): CalendarResult | null {
+  const parsed = safeParse(raw) as ParsedCalendar | null;
+  if (!parsed || !Array.isArray(parsed.ideas) || parsed.ideas.length === 0) {
+    return null;
+  }
+  const ideas: CalendarIdea[] = parsed.ideas
+    .map((it, i) => {
+      const net = String(it.network ?? "").toLowerCase() as SocialNetwork;
+      return {
+        day:
+          typeof it.day === "string" && it.day.trim()
+            ? it.day.trim()
+            : DAY_LABELS[i % DAY_LABELS.length],
+        title: typeof it.title === "string" ? it.title.trim() : "",
+        format:
+          typeof it.format === "string" && it.format.trim()
+            ? it.format.trim()
+            : "Post único",
+        network: VALID_NETWORKS.has(net) ? net : "instagram",
+      };
+    })
+    .filter((it) => it.title);
+  if (ideas.length === 0) return null;
+  return { ideas, source: "ai" };
+}
+
+async function calendarWithGemini(
+  req: CalendarRequest,
+): Promise<CalendarResult | null> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          contents: [
+            { role: "user", parts: [{ text: buildCalendarPrompt(req) }] },
+          ],
+          generationConfig: {
+            temperature: 0.9,
+            responseMimeType: "application/json",
+          },
+        }),
+      },
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const content = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (typeof content !== "string") return null;
+    return mergeCalendar(content);
+  } catch {
+    return null;
+  }
+}
+
+async function calendarWithOpenAI(
+  req: CalendarRequest,
+): Promise<CalendarResult | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: buildCalendarPrompt(req) },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.9,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (typeof content !== "string") return null;
+    return mergeCalendar(content);
+  } catch {
+    return null;
+  }
+}
+
+export async function generateCalendar(
+  req: CalendarRequest,
+): Promise<CalendarResult> {
+  if (process.env.GEMINI_API_KEY) {
+    const gemini = await calendarWithGemini(req);
+    if (gemini) return gemini;
+  }
+  if (process.env.OPENAI_API_KEY) {
+    const openai = await calendarWithOpenAI(req);
+    if (openai) return openai;
+  }
+  return buildCalendarStub(req);
+}

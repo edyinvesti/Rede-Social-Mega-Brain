@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toPng } from "html-to-image";
 import JSZip from "jszip";
 import { AppNav } from "@/components/AppNav";
@@ -21,14 +21,15 @@ import type {
 import type { GeneratedPost } from "@/lib/types";
 import { NETWORK_LABELS } from "@/lib/types";
 
-export default function CreatePage() {
+function CreatePageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { brand, ready, addPost } = useBrand();
   const posterRef = useRef<HTMLDivElement>(null);
   const exportRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const [formatId, setFormatId] = useState(FORMATS[0].id);
-  const [topic, setTopic] = useState("");
+  const [topic, setTopic] = useState(() => searchParams.get("topic") ?? "");
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadingAll, setDownloadingAll] = useState(false);
@@ -803,5 +804,13 @@ export default function CreatePage() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function CreatePage() {
+  return (
+    <Suspense fallback={null}>
+      <CreatePageInner />
+    </Suspense>
   );
 }
