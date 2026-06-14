@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { toPng } from "html-to-image";
 import JSZip from "jszip";
 import { AppNav } from "@/components/AppNav";
-import { PosterPreview } from "@/components/PosterPreview";
+import {
+  PosterPreview,
+  EMPTY_OFFSETS,
+  type PosterOffsets,
+} from "@/components/PosterPreview";
 import { useBrand } from "@/lib/brand-context";
 import { FORMATS, getFormat } from "@/lib/formats";
 import { TEMPLATE_NICHES } from "@/lib/templates";
@@ -38,6 +42,8 @@ export default function CreatePage() {
   const [slideIndex, setSlideIndex] = useState(0);
   const [slideCount, setSlideCount] = useState(5);
   const slideRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const [offsets, setOffsets] = useState<PosterOffsets>(EMPTY_OFFSETS);
+  const [editMode, setEditMode] = useState(false);
 
   const copyText = async (text: string, which: "caption" | "hashtags") => {
     try {
@@ -142,6 +148,8 @@ export default function CreatePage() {
       });
       if (!res.ok) throw new Error("Falha ao gerar conteúdo.");
       const copy = (await res.json()) as CopyResult;
+      setOffsets(EMPTY_OFFSETS);
+      setEditMode(false);
       setPost({
         id: crypto.randomUUID(),
         formatId,
@@ -266,8 +274,12 @@ export default function CreatePage() {
 
   const save = () => {
     if (!post) return;
-    addPost(post);
+    addPost({ ...post, offsets });
     router.push("/dashboard");
+  };
+
+  const updatePost = (patch: Partial<GeneratedPost>) => {
+    setPost((p) => (p ? { ...p, ...patch } : p));
   };
 
   if (!ready) return null;
@@ -313,6 +325,8 @@ export default function CreatePage() {
                     setPost(null);
                     setCarousel(null);
                     setSlideIndex(0);
+                    setOffsets(EMPTY_OFFSETS);
+                    setEditMode(false);
                   }}
                   className={`rounded-xl border p-3 text-left transition ${
                     formatId === f.id
@@ -454,6 +468,9 @@ export default function CreatePage() {
                   post={post}
                   format={format}
                   width={previewWidth}
+                  offsets={offsets}
+                  editable={editMode}
+                  onOffsetsChange={setOffsets}
                 />
               ) : (
                 <div
@@ -577,6 +594,74 @@ export default function CreatePage() {
             )}
 
             {post && (
+              <div className="mt-4 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setEditMode((v) => !v)}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                    editMode
+                      ? "border-brand bg-brand/10 text-brand-2"
+                      : "border-border bg-surface-2 hover:border-brand-2/50"
+                  }`}
+                >
+                  {editMode ? "✓ Editando arte" : "✎ Editar arte"}
+                </button>
+                {editMode && (
+                  <button
+                    type="button"
+                    onClick={() => setOffsets(EMPTY_OFFSETS)}
+                    className="text-xs font-medium text-muted transition hover:text-foreground"
+                  >
+                    Resetar posições
+                  </button>
+                )}
+              </div>
+            )}
+
+            {post && editMode && (
+              <div className="mt-3 grid gap-3 rounded-xl border border-border bg-surface-2 p-4">
+                <p className="text-xs text-muted">
+                  Arraste o logo, o título e o botão direto na arte. Edite os
+                  textos abaixo.
+                </p>
+                <label className="grid gap-1 text-xs font-medium">
+                  Título
+                  <input
+                    value={post.headline}
+                    onChange={(e) => updatePost({ headline: e.target.value })}
+                    className="input"
+                  />
+                </label>
+                <label className="grid gap-1 text-xs font-medium">
+                  Palavra em destaque
+                  <input
+                    value={post.highlight}
+                    onChange={(e) => updatePost({ highlight: e.target.value })}
+                    placeholder="parte do título com cor de destaque"
+                    className="input"
+                  />
+                </label>
+                <label className="grid gap-1 text-xs font-medium">
+                  Texto
+                  <textarea
+                    value={post.body}
+                    onChange={(e) => updatePost({ body: e.target.value })}
+                    rows={2}
+                    className="input"
+                  />
+                </label>
+                <label className="grid gap-1 text-xs font-medium">
+                  Botão (CTA)
+                  <input
+                    value={post.cta}
+                    onChange={(e) => updatePost({ cta: e.target.value })}
+                    className="input"
+                  />
+                </label>
+              </div>
+            )}
+
+            {post && (
               <div className="mt-5 flex gap-3">
                 <button
                   type="button"
@@ -685,6 +770,7 @@ export default function CreatePage() {
               post={post}
               format={f}
               width={400}
+              offsets={offsets}
             />
           ))}
         </div>

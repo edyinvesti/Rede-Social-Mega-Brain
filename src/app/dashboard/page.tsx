@@ -87,6 +87,7 @@ export default function DashboardPage() {
                       post={post}
                       format={format}
                       width={240}
+                      offsets={post.offsets}
                     />
                   </div>
                   <div className="flex items-center justify-between p-4">

@@ -1,9 +1,26 @@
 "use client";
 
-import { forwardRef } from "react";
-import type { BrandProfile, ContentFormat, GeneratedPost } from "@/lib/types";
+import { forwardRef, useRef } from "react";
+import type {
+  BrandProfile,
+  ContentFormat,
+  GeneratedPost,
+  PosterOffsets,
+} from "@/lib/types";
 import { contrastColor } from "@/lib/palettes";
 import { fontStack } from "@/lib/fonts";
+
+export type { PosterOffsets };
+export type PosterElement = "logo" | "headline" | "cta";
+
+export const EMPTY_OFFSETS: PosterOffsets = {
+  logo: { x: 0, y: 0 },
+  headline: { x: 0, y: 0 },
+  cta: { x: 0, y: 0 },
+};
+
+const clamp = (v: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, v));
 
 interface PosterPreviewProps {
   brand: BrandProfile;
@@ -13,6 +30,11 @@ interface PosterPreviewProps {
   width: number;
   /** when part of a carousel, shows a "1/5" badge */
   slideInfo?: { index: number; total: number };
+  /** position offsets per element (fraction of width) */
+  offsets?: PosterOffsets;
+  /** enables drag-to-move of the logo, headline and CTA */
+  editable?: boolean;
+  onOffsetsChange?: (offsets: PosterOffsets) => void;
 }
 
 /**
@@ -21,11 +43,78 @@ interface PosterPreviewProps {
  * resolution via html-to-image's pixelRatio.
  */
 export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
-  function PosterPreview({ brand, post, format, width, slideInfo }, ref) {
+  function PosterPreview(
+    {
+      brand,
+      post,
+      format,
+      width,
+      slideInfo,
+      offsets = EMPTY_OFFSETS,
+      editable = false,
+      onOffsetsChange,
+    },
+    ref,
+  ) {
     const height = (width * format.height) / format.width;
     const u = width / 100; // 1 unit = 1% of width
     const { palette } = brand;
     const onPrimary = contrastColor(palette.primary);
+    const dragRef = useRef<{
+      key: PosterElement;
+      startX: number;
+      startY: number;
+      baseX: number;
+      baseY: number;
+    } | null>(null);
+
+    const handleProps = (key: PosterElement) => {
+      const off = offsets[key];
+      const base: React.CSSProperties = {
+        transform: `translate(${off.x * width}px, ${off.y * width}px)`,
+      };
+      if (!editable || !onOffsetsChange) return { style: base };
+      return {
+        style: {
+          ...base,
+          cursor: "grab",
+          touchAction: "none" as const,
+          outline: `1px dashed ${palette.primary}aa`,
+          outlineOffset: u * 1.5,
+          borderRadius: u * 1.5,
+        },
+        onPointerDown: (e: React.PointerEvent) => {
+          e.preventDefault();
+          dragRef.current = {
+            key,
+            startX: e.clientX,
+            startY: e.clientY,
+            baseX: off.x,
+            baseY: off.y,
+          };
+          const move = (ev: PointerEvent) => {
+            const d = dragRef.current;
+            if (!d) return;
+            const nx = d.baseX + (ev.clientX - d.startX) / width;
+            const ny = d.baseY + (ev.clientY - d.startY) / width;
+            onOffsetsChange({
+              ...offsets,
+              [d.key]: {
+                x: clamp(nx, -0.7, 0.7),
+                y: clamp(ny, -1, 1),
+              },
+            });
+          };
+          const up = () => {
+            dragRef.current = null;
+            window.removeEventListener("pointermove", move);
+            window.removeEventListener("pointerup", up);
+          };
+          window.addEventListener("pointermove", move);
+          window.addEventListener("pointerup", up);
+        },
+      };
+    };
 
     const renderHeadline = () => {
       const headline = post.headline;
@@ -91,12 +180,19 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
 
         {/* header: logo / brand name */}
         <div
-          style={{
-            position: "relative",
-            display: "flex",
-            alignItems: "center",
-            gap: u * 2.5,
-          }}
+          {...(() => {
+            const hp = handleProps("logo");
+            return {
+              ...hp,
+              style: {
+                position: "relative" as const,
+                display: "flex",
+                alignItems: "center",
+                gap: u * 2.5,
+                ...hp.style,
+              },
+            };
+          })()}
         >
           {brand.logoDataUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -157,7 +253,15 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
         </div>
 
         {/* main content */}
-        <div style={{ position: "relative" }}>
+        <div
+          {...(() => {
+            const hp = handleProps("headline");
+            return {
+              ...hp,
+              style: { position: "relative" as const, ...hp.style },
+            };
+          })()}
+        >
           <h1
             style={{
               fontFamily: fontStack(brand.fontHeading),
@@ -187,13 +291,20 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
 
         {/* footer: CTA */}
         <div
-          style={{
-            position: "relative",
-            display: "flex",
-            alignItems: "center",
-            gap: u * 3,
-            visibility: post.cta ? "visible" : "hidden",
-          }}
+          {...(() => {
+            const hp = handleProps("cta");
+            return {
+              ...hp,
+              style: {
+                position: "relative" as const,
+                display: "flex",
+                alignItems: "center",
+                gap: u * 3,
+                visibility: post.cta ? "visible" : "hidden",
+                ...hp.style,
+              },
+            };
+          })()}
         >
           <span
             style={{

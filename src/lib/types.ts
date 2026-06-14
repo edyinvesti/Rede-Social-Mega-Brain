@@ -73,6 +73,13 @@ export interface ContentFormat {
   top?: boolean;
 }
 
+/** Position offsets per poster element, as a fraction of the poster width. */
+export interface PosterOffsets {
+  logo: { x: number; y: number };
+  headline: { x: number; y: number };
+  cta: { x: number; y: number };
+}
+
 export interface GeneratedPost {
   id: string;
   formatId: string;
@@ -83,5 +90,6 @@ export interface GeneratedPost {
   cta: string;
   caption?: string;
   hashtags?: string[];
+  offsets?: PosterOffsets;
   createdAt: number;
 }
