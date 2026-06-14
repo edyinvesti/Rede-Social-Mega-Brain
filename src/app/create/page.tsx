@@ -8,7 +8,12 @@ import { AppNav } from "@/components/AppNav";
 import { PosterPreview } from "@/components/PosterPreview";
 import { useBrand } from "@/lib/brand-context";
 import { FORMATS, getFormat } from "@/lib/formats";
-import type { CopyResult } from "@/lib/generate-copy";
+import { TEMPLATE_NICHES } from "@/lib/templates";
+import type {
+  CopyResult,
+  CarouselResult,
+  CarouselSlide,
+} from "@/lib/generate-copy";
 import type { GeneratedPost } from "@/lib/types";
 import { NETWORK_LABELS } from "@/lib/types";
 
@@ -28,6 +33,11 @@ export default function CreatePage() {
   const [post, setPost] = useState<GeneratedPost | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<"caption" | "hashtags" | null>(null);
+  const [nicheId, setNicheId] = useState<string | null>(null);
+  const [carousel, setCarousel] = useState<CarouselResult | null>(null);
+  const [slideIndex, setSlideIndex] = useState(0);
+  const [slideCount, setSlideCount] = useState(5);
+  const slideRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   const copyText = async (text: string, which: "caption" | "hashtags") => {
     try {
@@ -56,10 +66,59 @@ export default function CreatePage() {
   }, []);
 
   const format = getFormat(formatId) ?? FORMATS[0];
+  const isCarousel =
+    formatId === "carrossel-portrait" || formatId === "stories-carrossel";
+
+  const slidePost = (slide: CarouselSlide, idx: number): GeneratedPost => ({
+    id: `slide-${idx}`,
+    formatId,
+    topic,
+    headline: slide.title,
+    highlight: "",
+    body: slide.text,
+    cta: "",
+    createdAt: 0,
+  });
+
+  const generateCarouselPost = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/carousel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic,
+          slideCount,
+          formatName: format.name,
+          network: format.network,
+          brand: {
+            brandName: brand.brandName,
+            brandDescription: brand.brandDescription,
+            objective: brand.objective,
+            audience: brand.audience,
+            toneOfVoice: brand.toneOfVoice,
+          },
+        }),
+      });
+      if (!res.ok) throw new Error("Falha ao gerar carrossel.");
+      const data = (await res.json()) as CarouselResult;
+      setCarousel(data);
+      setSlideIndex(0);
+    } catch {
+      setError("Não foi possível gerar o carrossel. Tente novamente.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const generate = async () => {
     if (!topic.trim()) {
       setError("Descreva o tema do post.");
+      return;
+    }
+    if (isCarousel) {
+      await generateCarouselPost();
       return;
     }
     setError(null);
@@ -156,6 +215,55 @@ export default function CreatePage() {
     }
   };
 
+  const downloadSlide = async () => {
+    const node = slideRefs.current[slideIndex];
+    if (!node) return;
+    setDownloading(true);
+    try {
+      const scale = format.width / node.offsetWidth;
+      const dataUrl = await toPng(node, { pixelRatio: scale, cacheBust: true });
+      const link = document.createElement("a");
+      link.download = `${brand.brandName || "carrossel"}-slide-${slideIndex + 1}.png`;
+      link.href = dataUrl;
+      link.click();
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const downloadCarousel = async () => {
+    if (!carousel) return;
+    setDownloadingAll(true);
+    try {
+      const zip = new JSZip();
+      for (let i = 0; i < carousel.slides.length; i++) {
+        const node = slideRefs.current[i];
+        if (!node) continue;
+        const scale = format.width / node.offsetWidth;
+        const dataUrl = await toPng(node, { pixelRatio: scale, cacheBust: true });
+        zip.file(
+          `${brand.brandName || "carrossel"}-slide-${String(i + 1).padStart(2, "0")}.png`,
+          dataUrl.split(",")[1],
+          { base64: true },
+        );
+      }
+      const hashtags = (carousel.hashtags ?? []).map((h) => `#${h}`).join(" ");
+      zip.file(
+        "legenda.txt",
+        `Legenda (${NETWORK_LABELS[format.network]}):\n${carousel.caption}\n\nHashtags:\n${hashtags}\n`,
+      );
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.download = `${brand.brandName || "carrossel"}-carrossel.zip`;
+      link.href = url;
+      link.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloadingAll(false);
+    }
+  };
+
   const save = () => {
     if (!post) return;
     addPost(post);
@@ -203,6 +311,8 @@ export default function CreatePage() {
                     setFormatId(f.id);
                     // Avoid preview/download diverging from the post's format.
                     setPost(null);
+                    setCarousel(null);
+                    setSlideIndex(0);
                   }}
                   className={`rounded-xl border p-3 text-left transition ${
                     formatId === f.id
@@ -228,6 +338,47 @@ export default function CreatePage() {
           </div>
 
           <div className="mt-6">
+            <p className="mb-3 text-sm font-medium">
+              Modelos de pauta <span className="text-muted">(opcional)</span>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {TEMPLATE_NICHES.map((n) => (
+                <button
+                  key={n.id}
+                  type="button"
+                  onClick={() => setNicheId(nicheId === n.id ? null : n.id)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                    nicheId === n.id
+                      ? "border-brand bg-brand/10 text-brand-2"
+                      : "border-border bg-surface-2 hover:border-brand-2/50"
+                  }`}
+                >
+                  {n.emoji} {n.label}
+                </button>
+              ))}
+            </div>
+            {nicheId && (
+              <div className="mt-3 grid gap-2">
+                {TEMPLATE_NICHES.find((n) => n.id === nicheId)?.ideas.map(
+                  (idea) => (
+                    <button
+                      key={idea}
+                      type="button"
+                      onClick={() => {
+                        setTopic(idea);
+                        setPost(null);
+                      }}
+                      className="rounded-xl border border-border bg-surface-2 p-3 text-left text-sm text-muted transition hover:border-brand-2/50 hover:text-foreground"
+                    >
+                      {idea}
+                    </button>
+                  ),
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6">
             <label className="block space-y-2">
               <span className="text-sm font-medium">Tema do post</span>
               <textarea
@@ -240,6 +391,28 @@ export default function CreatePage() {
             </label>
           </div>
 
+          {isCarousel && (
+            <div className="mt-6">
+              <p className="mb-3 text-sm font-medium">Número de slides</p>
+              <div className="flex flex-wrap gap-2">
+                {[3, 4, 5, 6, 7, 8].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setSlideCount(n)}
+                    className={`h-9 w-9 rounded-lg border text-sm font-medium transition ${
+                      slideCount === n
+                        ? "border-brand bg-brand/10 text-brand-2"
+                        : "border-border bg-surface-2 hover:border-brand-2/50"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
 
           <button
@@ -248,7 +421,13 @@ export default function CreatePage() {
             disabled={loading}
             className="brand-gradient mt-5 w-full rounded-xl px-6 py-3 text-sm font-semibold transition hover:opacity-90 disabled:opacity-50"
           >
-            {loading ? "Gerando..." : "✨ Gerar com IA"}
+            {loading
+              ? isCarousel
+                ? "Gerando carrossel..."
+                : "Gerando..."
+              : isCarousel
+                ? "✨ Gerar carrossel com IA"
+                : "✨ Gerar com IA"}
           </button>
         </div>
 
@@ -257,7 +436,18 @@ export default function CreatePage() {
           <div className="rounded-2xl border border-border bg-surface p-6">
             <p className="mb-4 text-sm font-medium text-muted">Pré-visualização</p>
             <div className="flex justify-center">
-              {post ? (
+              {isCarousel && carousel ? (
+                <PosterPreview
+                  brand={brand}
+                  post={slidePost(carousel.slides[slideIndex], slideIndex)}
+                  format={format}
+                  width={previewWidth}
+                  slideInfo={{
+                    index: slideIndex + 1,
+                    total: carousel.slides.length,
+                  }}
+                />
+              ) : post ? (
                 <PosterPreview
                   ref={posterRef}
                   brand={brand}
@@ -278,6 +468,113 @@ export default function CreatePage() {
                 </div>
               )}
             </div>
+
+            {isCarousel && carousel && (
+              <div className="mt-4 flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSlideIndex((i) => Math.max(0, i - 1))}
+                  disabled={slideIndex === 0}
+                  className="rounded-lg border border-border px-3 py-1.5 text-sm transition hover:border-brand-2/50 disabled:opacity-40"
+                >
+                  ‹
+                </button>
+                <div className="flex gap-1.5">
+                  {carousel.slides.map((_, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      aria-label={`Slide ${i + 1}`}
+                      onClick={() => setSlideIndex(i)}
+                      className={`h-2.5 w-2.5 rounded-full transition ${
+                        i === slideIndex ? "bg-brand" : "bg-border"
+                      }`}
+                    />
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSlideIndex((i) =>
+                      Math.min(carousel.slides.length - 1, i + 1),
+                    )
+                  }
+                  disabled={slideIndex === carousel.slides.length - 1}
+                  className="rounded-lg border border-border px-3 py-1.5 text-sm transition hover:border-brand-2/50 disabled:opacity-40"
+                >
+                  ›
+                </button>
+              </div>
+            )}
+
+            {isCarousel && carousel && (
+              <>
+                <div className="mt-5 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={downloadSlide}
+                    disabled={downloading}
+                    className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-medium transition hover:border-brand-2/50 disabled:opacity-50"
+                  >
+                    {downloading ? "Baixando..." : "Baixar este slide"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={downloadCarousel}
+                    disabled={downloadingAll}
+                    className="brand-gradient flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold transition hover:opacity-90 disabled:opacity-50"
+                  >
+                    {downloadingAll ? "Gerando..." : "⬇ Baixar carrossel (.zip)"}
+                  </button>
+                </div>
+                <div className="mt-5 border-t border-border pt-5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium">
+                      Legenda para {NETWORK_LABELS[format.network]}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => copyText(carousel.caption, "caption")}
+                      className="text-xs font-medium text-brand-2 transition hover:opacity-80"
+                    >
+                      {copied === "caption" ? "Copiado!" : "Copiar"}
+                    </button>
+                  </div>
+                  <p className="mt-2 whitespace-pre-line rounded-xl border border-border bg-surface-2 p-3 text-sm text-muted">
+                    {carousel.caption}
+                  </p>
+                  {carousel.hashtags.length > 0 && (
+                    <>
+                      <div className="mt-4 flex items-center justify-between">
+                        <p className="text-sm font-medium">Hashtags</p>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            copyText(
+                              carousel.hashtags.map((h) => `#${h}`).join(" "),
+                              "hashtags",
+                            )
+                          }
+                          className="text-xs font-medium text-brand-2 transition hover:opacity-80"
+                        >
+                          {copied === "hashtags" ? "Copiado!" : "Copiar"}
+                        </button>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {carousel.hashtags.map((h) => (
+                          <span
+                            key={h}
+                            className="rounded-full border border-border bg-surface-2 px-2.5 py-1 text-xs text-brand-2"
+                          >
+                            #{h}
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
 
             {post && (
               <div className="mt-5 flex gap-3">
@@ -388,6 +685,33 @@ export default function CreatePage() {
               post={post}
               format={f}
               width={400}
+            />
+          ))}
+        </div>
+      )}
+
+      {isCarousel && carousel && (
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            left: -99999,
+            top: 0,
+            opacity: 0,
+            pointerEvents: "none",
+          }}
+        >
+          {carousel.slides.map((slide, i) => (
+            <PosterPreview
+              key={i}
+              ref={(el) => {
+                slideRefs.current[i] = el;
+              }}
+              brand={brand}
+              post={slidePost(slide, i)}
+              format={format}
+              width={400}
+              slideInfo={{ index: i + 1, total: carousel.slides.length }}
             />
           ))}
         </div>

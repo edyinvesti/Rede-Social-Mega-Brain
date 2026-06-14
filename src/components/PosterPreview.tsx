@@ -11,6 +11,8 @@ interface PosterPreviewProps {
   format: ContentFormat;
   /** rendered display width in px */
   width: number;
+  /** when part of a carousel, shows a "1/5" badge */
+  slideInfo?: { index: number; total: number };
 }
 
 /**
@@ -19,7 +21,7 @@ interface PosterPreviewProps {
  * resolution via html-to-image's pixelRatio.
  */
 export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
-  function PosterPreview({ brand, post, format, width }, ref) {
+  function PosterPreview({ brand, post, format, width, slideInfo }, ref) {
     const height = (width * format.height) / format.width;
     const u = width / 100; // 1 unit = 1% of width
     const { palette } = brand;
@@ -137,6 +139,21 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
           >
             {brand.brandName || "Sua Marca"}
           </span>
+          {slideInfo && (
+            <span
+              style={{
+                marginLeft: "auto",
+                fontWeight: 700,
+                fontSize: u * 3.4,
+                padding: `${u * 1.2}px ${u * 3}px`,
+                borderRadius: u * 10,
+                background: `${palette.primary}33`,
+                color: palette.text,
+              }}
+            >
+              {slideInfo.index}/{slideInfo.total}
+            </span>
+          )}
         </div>
 
         {/* main content */}
@@ -175,6 +192,7 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
             display: "flex",
             alignItems: "center",
             gap: u * 3,
+            visibility: post.cta ? "visible" : "hidden",
           }}
         >
           <span

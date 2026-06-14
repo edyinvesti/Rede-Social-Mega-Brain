@@ -273,3 +273,181 @@ export async function generateCopy(req: CopyRequest): Promise<CopyResult> {
   }
   return buildStub(req);
 }
+
+// ---------------------------------------------------------------------------
+// Carousel (multi-slide) generation
+// ---------------------------------------------------------------------------
+
+export interface CarouselSlide {
+  title: string;
+  text: string;
+}
+
+export interface CarouselResult {
+  slides: CarouselSlide[];
+  caption: string;
+  hashtags: string[];
+  source: "ai" | "stub";
+}
+
+export interface CarouselRequest extends CopyRequest {
+  slideCount: number;
+}
+
+function buildCarouselPrompt(req: CarouselRequest): string {
+  return `Crie o roteiro de um CARROSSEL de ${req.slideCount} slides para ${NETWORK_LABELS[req.network]} sobre o tema: "${req.topic}".
+Marca: ${req.brand.brandName}
+Descrição da marca: ${req.brand.brandDescription}
+Objetivo: ${req.brand.objective}
+Público-alvo: ${req.brand.audience}
+Tom de voz: ${req.brand.toneOfVoice}
+
+Regras do carrossel:
+- Slide 1 = capa com um gancho forte que faz parar de rolar.
+- Slides do meio = conteúdo de valor, um ponto por slide, fácil de ler.
+- Último slide = chamada para ação clara (${OBJECTIVE_CTA[req.brand.objective] ?? "engajar"}).
+
+Retorne um JSON com as chaves:
+- "slides": array com exatamente ${req.slideCount} itens, cada um com "title" (até 6 palavras) e "text" (até 160 caracteres)
+- "caption": legenda pronta para publicar no estilo de ${NETWORK_LABELS[req.network]} (sem as hashtags)
+- "hashtags": array de 5 a 8 hashtags relevantes, sem o caractere "#" e sem espaços`;
+}
+
+function buildCarouselStub(req: CarouselRequest): CarouselResult {
+  const base = buildStub(req);
+  const slides: CarouselSlide[] = [];
+  for (let i = 0; i < req.slideCount; i++) {
+    if (i === 0) {
+      slides.push({ title: base.headline, text: req.topic.trim() || base.body });
+    } else if (i === req.slideCount - 1) {
+      slides.push({ title: "Bora começar?", text: base.cta });
+    } else {
+      slides.push({
+        title: `Dica ${i}`,
+        text: base.body,
+      });
+    }
+  }
+  return {
+    slides,
+    caption: base.caption,
+    hashtags: base.hashtags,
+    source: "stub",
+  };
+}
+
+interface ParsedCarousel {
+  slides?: Array<{ title?: unknown; text?: unknown }>;
+  caption?: unknown;
+  hashtags?: unknown;
+}
+
+function mergeCarousel(
+  raw: string,
+  req: CarouselRequest,
+): CarouselResult | null {
+  const parsed = safeParse(raw) as ParsedCarousel | null;
+  if (!parsed || !Array.isArray(parsed.slides) || parsed.slides.length === 0) {
+    return null;
+  }
+  const stub = buildCarouselStub(req);
+  const slides: CarouselSlide[] = parsed.slides
+    .map((s) => ({
+      title: typeof s.title === "string" ? s.title.trim() : "",
+      text: typeof s.text === "string" ? s.text.trim() : "",
+    }))
+    .filter((s) => s.title || s.text);
+  if (slides.length === 0) return null;
+  const hashtags = Array.isArray(parsed.hashtags)
+    ? parsed.hashtags.map((h) => String(h).replace(/^#/, "").trim()).filter(Boolean)
+    : [];
+  return {
+    slides,
+    caption:
+      typeof parsed.caption === "string" && parsed.caption.trim()
+        ? parsed.caption.trim()
+        : stub.caption,
+    hashtags: hashtags.length > 0 ? hashtags : stub.hashtags,
+    source: "ai",
+  };
+}
+
+async function carouselWithGemini(
+  req: CarouselRequest,
+): Promise<CarouselResult | null> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          contents: [
+            { role: "user", parts: [{ text: buildCarouselPrompt(req) }] },
+          ],
+          generationConfig: {
+            temperature: 0.8,
+            responseMimeType: "application/json",
+          },
+        }),
+      },
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const content = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (typeof content !== "string") return null;
+    return mergeCarousel(content, req);
+  } catch {
+    return null;
+  }
+}
+
+async function carouselWithOpenAI(
+  req: CarouselRequest,
+): Promise<CarouselResult | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: buildCarouselPrompt(req) },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.8,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (typeof content !== "string") return null;
+    return mergeCarousel(content, req);
+  } catch {
+    return null;
+  }
+}
+
+export async function generateCarousel(
+  req: CarouselRequest,
+): Promise<CarouselResult> {
+  if (process.env.GEMINI_API_KEY) {
+    const gemini = await carouselWithGemini(req);
+    if (gemini) return gemini;
+  }
+  if (process.env.OPENAI_API_KEY) {
+    const openai = await carouselWithOpenAI(req);
+    if (openai) return openai;
+  }
+  return buildCarouselStub(req);
+}
