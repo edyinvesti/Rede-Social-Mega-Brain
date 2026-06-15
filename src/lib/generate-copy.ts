@@ -145,7 +145,7 @@ function buildStub(req: CopyRequest): CopyResult {
     caption: `${headline} — ${body} ${cta}.`,
     hashtags: buildStubHashtags(req),
     source: "stub",
-    backgroundPrompt: "premium product photography studio, dramatic commercial lighting, smooth marble surface with subtle reflections, luxury aesthetic, clean minimal background, professional advertising style, 8k ultra detailed, soft gradient lighting, commercial product shot setup --ar 9:16",
+    backgroundPrompt: "luxury product studio, professional commercial lighting, marble surface, premium branding background, 8k resolution --ar 9:16",
   };
 }
 

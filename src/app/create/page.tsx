@@ -180,7 +180,7 @@ function CreatePageInner() {
       setEditMode(false);
 
       let finalBgUrl: string | undefined;
-      if (isImage && copy.backgroundPrompt) {
+      if (isImage) {
         setIsGeneratingBg(true);
         try {
           const bgTemplate = BACKGROUND_TEMPLATES.find(t => t.id === bgTemplateId);
@@ -189,15 +189,23 @@ function CreatePageInner() {
             const bgUrl = `https://image.pollinations.ai/prompt/${prompt}?width=${format.width}&height=${format.height}&nologo=true`;
             // Fetch as blob to embed natively so html-to-image works without CORS
             const bgRes = await fetch(bgUrl);
+            if (!bgRes.ok) throw new Error(`Pollinations error: ${bgRes.status}`);
             const bgBlob = await bgRes.blob();
-            finalBgUrl = await new Promise<string>((resolve) => {
+            finalBgUrl = await new Promise<string>((resolve, reject) => {
               const reader = new FileReader();
-              reader.onloadend = () => resolve(reader.result as string);
+              reader.onloadend = () => {
+                if (reader.result) resolve(reader.result as string);
+                else reject(new Error("FileReader failed"));
+              };
+              reader.onerror = () => reject(new Error("FileReader error"));
               reader.readAsDataURL(bgBlob);
             });
           }
         } catch (e) {
           console.error("Failed to generate background", e);
+          // Fallback: use unsplash source
+          const unsplashUrl = `https://source.unsplash.com/random/${format.width}x${format.height}/?product,studio,commercial`;
+          finalBgUrl = unsplashUrl;
         }
         setIsGeneratingBg(false);
       }
