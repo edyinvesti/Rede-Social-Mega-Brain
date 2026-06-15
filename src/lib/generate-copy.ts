@@ -15,6 +15,26 @@ export interface CopyRequest {
   >;
 }
 
+/** Request for image-based (vision) content generation */
+export interface ImageCopyRequest {
+  /** base64-encoded image data (without the data:...;base64, prefix) */
+  imageBase64: string;
+  /** MIME type of the image, e.g. "image/jpeg" */
+  mimeType: string;
+  /** Optional topic hint — if omitted the AI infers from the image */
+  topic?: string;
+  formatName: string;
+  network: SocialNetwork;
+  brand: Pick<
+    BrandProfile,
+    | "brandName"
+    | "brandDescription"
+    | "objective"
+    | "audience"
+    | "toneOfVoice"
+  >;
+}
+
 export interface CopyResult {
   headline: string;
   highlight: string;
@@ -677,4 +697,157 @@ export async function generateCalendar(
     if (openai) return openai;
   }
   return buildCalendarStub(req);
+}
+
+// ---------------------------------------------------------------------------
+// Image-based generation (vision / multimodal)
+// ---------------------------------------------------------------------------
+
+function buildImagePrompt(req: ImageCopyRequest): string {
+  const topicHint = req.topic?.trim()
+    ? `O usuário indica que o tema é: "${req.topic}". `
+    : "";
+  return `${topicHint}Analise a imagem enviada e crie o texto de marketing de um post (${req.formatName}) para ${NETWORK_LABELS[req.network]}.
+Marca: ${req.brand.brandName}
+Descrição da marca: ${req.brand.brandDescription}
+Objetivo: ${req.brand.objective}
+Público-alvo: ${req.brand.audience}
+Tom de voz: ${req.brand.toneOfVoice}
+
+Com base no que você vê na imagem, retorne um JSON com as chaves:
+- "headline": título principal curto (até 6 palavras)
+- "highlight": 1 a 2 palavras do título que devem ser destacadas em cor
+- "body": texto de apoio (até 220 caracteres)
+- "cta": chamada para ação curta
+- "caption": legenda pronta para publicar em ${NETWORK_LABELS[req.network]} (sem hashtags)
+- "hashtags": array de 5 a 8 hashtags relevantes, sem "#" e sem espaços`;
+}
+
+async function imageWithGemini(
+  req: ImageCopyRequest,
+): Promise<CopyResult | null> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: req.mimeType,
+                    data: req.imageBase64,
+                  },
+                },
+                { text: buildImagePrompt(req) },
+              ],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.8,
+            responseMimeType: "application/json",
+          },
+        }),
+      },
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const content = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (typeof content !== "string") return null;
+    const parsed = safeParse(content);
+    if (!parsed) return null;
+    // Build a minimal CopyRequest for mergeWithStub
+    const copyReq: CopyRequest = {
+      topic: req.topic ?? "",
+      formatName: req.formatName,
+      network: req.network,
+      brand: req.brand,
+    };
+    return mergeWithStub(parsed, copyReq);
+  } catch {
+    return null;
+  }
+}
+
+async function imageWithOpenAI(
+  req: ImageCopyRequest,
+): Promise<CopyResult | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+  // gpt-4o supports vision; gpt-4o-mini does not — override to gpt-4o
+  const model =
+    process.env.OPENAI_MODEL === "gpt-4o-mini" ||
+    !process.env.OPENAI_MODEL
+      ? "gpt-4o"
+      : process.env.OPENAI_MODEL;
+  try {
+    const dataUrl = `data:${req.mimeType};base64,${req.imageBase64}`;
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          {
+            role: "user",
+            content: [
+              { type: "image_url", image_url: { url: dataUrl } },
+              { type: "text", text: buildImagePrompt(req) },
+            ],
+          },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.8,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (typeof content !== "string") return null;
+    const parsed = safeParse(content);
+    if (!parsed) return null;
+    const copyReq: CopyRequest = {
+      topic: req.topic ?? "",
+      formatName: req.formatName,
+      network: req.network,
+      brand: req.brand,
+    };
+    return mergeWithStub(parsed, copyReq);
+  } catch {
+    return null;
+  }
+}
+
+/** Generate marketing copy from an image using vision AI (Gemini → GPT-4o → stub). */
+export async function generateCopyFromImage(
+  req: ImageCopyRequest,
+): Promise<CopyResult> {
+  if (process.env.GEMINI_API_KEY) {
+    const gemini = await imageWithGemini(req);
+    if (gemini) return gemini;
+  }
+  if (process.env.OPENAI_API_KEY) {
+    const openai = await imageWithOpenAI(req);
+    if (openai) return openai;
+  }
+  // Fallback: stub without vision
+  const copyReq: CopyRequest = {
+    topic: req.topic ?? "imagem enviada",
+    formatName: req.formatName,
+    network: req.network,
+    brand: req.brand,
+  };
+  return buildStub(copyReq);
 }

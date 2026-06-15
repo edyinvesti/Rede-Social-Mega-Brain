@@ -46,6 +46,11 @@ function CreatePageInner() {
   const [offsets, setOffsets] = useState<PosterOffsets>(EMPTY_OFFSETS);
   const [editMode, setEditMode] = useState(false);
 
+  // New states for image upload
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [mimeType, setMimeType] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const copyText = async (text: string, which: "caption" | "hashtags") => {
     try {
       await navigator.clipboard.writeText(text);
@@ -120,8 +125,8 @@ function CreatePageInner() {
   };
 
   const generate = async () => {
-    if (!topic.trim()) {
-      setError("Descreva o tema do post.");
+    if (!topic.trim() && !imageBase64) {
+      setError("Descreva o tema do post ou adicione uma foto.");
       return;
     }
     if (isCarousel) {
@@ -131,21 +136,40 @@ function CreatePageInner() {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch("/api/generate", {
+      const isImage = !!imageBase64;
+      const endpoint = isImage ? "/api/analyze-image" : "/api/generate";
+      const payload = isImage
+        ? {
+            imageBase64,
+            mimeType,
+            topic, // Optional hint
+            formatName: format.name,
+            network: format.network,
+            brand: {
+              brandName: brand.brandName,
+              brandDescription: brand.brandDescription,
+              objective: brand.objective,
+              audience: brand.audience,
+              toneOfVoice: brand.toneOfVoice,
+            },
+          }
+        : {
+            topic,
+            formatName: format.name,
+            network: format.network,
+            brand: {
+              brandName: brand.brandName,
+              brandDescription: brand.brandDescription,
+              objective: brand.objective,
+              audience: brand.audience,
+              toneOfVoice: brand.toneOfVoice,
+            },
+          };
+
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          topic,
-          formatName: format.name,
-          network: format.network,
-          brand: {
-            brandName: brand.brandName,
-            brandDescription: brand.brandDescription,
-            objective: brand.objective,
-            audience: brand.audience,
-            toneOfVoice: brand.toneOfVoice,
-          },
-        }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error("Falha ao gerar conteúdo.");
       const copy = (await res.json()) as CopyResult;
@@ -154,7 +178,7 @@ function CreatePageInner() {
       setPost({
         id: crypto.randomUUID(),
         formatId,
-        topic,
+        topic: topic || "Imagem enviada",
         headline: copy.headline,
         highlight: copy.highlight,
         body: copy.body,
@@ -167,6 +191,31 @@ function CreatePageInner() {
       setError("Não foi possível gerar o conteúdo. Tente novamente.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) {
+      setError("A imagem deve ter no máximo 8MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (result) {
+        // extract base64 data and mime type
+        const match = result.match(/^data:(image\/[a-z]+);base64,(.+)$/);
+        if (match) {
+          setMimeType(match[1]);
+          setImageBase64(match[2]);
+        }
+      }
+    };
+    reader.readAsDataURL(file);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
@@ -434,8 +483,60 @@ function CreatePageInner() {
           </div>
 
           <div className="mt-6">
+            <div className="mb-6 rounded-xl border border-border bg-surface-2 p-4">
+              <p className="mb-3 text-sm font-medium">📷 Usar minha foto</p>
+              {imageBase64 ? (
+                <div className="flex items-center gap-4">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`data:${mimeType};base64,${imageBase64}`}
+                    alt="Preview"
+                    className="h-20 w-20 rounded-lg border border-border object-cover"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-brand-2">
+                      Imagem pronta para análise!
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setImageBase64(null);
+                        setMimeType(null);
+                      }}
+                      className="mt-1 text-xs text-red-400 hover:underline"
+                    >
+                      Remover imagem
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    ref={fileInputRef}
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-surface py-4 text-sm font-medium transition hover:border-brand-2/50"
+                  >
+                    Tirar foto ou escolher da galeria
+                  </button>
+                  <p className="mt-2 text-center text-xs text-muted">
+                    A IA vai ler a foto e criar o marketing por você.
+                  </p>
+                </>
+              )}
+            </div>
+
             <label className="block space-y-2">
-              <span className="text-sm font-medium">Tema do post</span>
+              <span className="text-sm font-medium">
+                {imageBase64 ? "Tema do post (opcional)" : "Tema do post"}
+              </span>
               <textarea
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
@@ -480,9 +581,11 @@ function CreatePageInner() {
               ? isCarousel
                 ? "Gerando carrossel..."
                 : "Gerando..."
-              : isCarousel
-                ? "✨ Gerar carrossel com IA"
-                : "✨ Gerar com IA"}
+              : imageBase64
+                ? "✨ Analisar imagem com IA"
+                : isCarousel
+                  ? "✨ Gerar carrossel com IA"
+                  : "✨ Gerar com IA"}
           </button>
         </div>
 
@@ -512,6 +615,9 @@ function CreatePageInner() {
                   offsets={offsets}
                   editable={editMode}
                   onOffsetsChange={setOffsets}
+                  backgroundImage={
+                    imageBase64 ? `data:${mimeType};base64,${imageBase64}` : undefined
+                  }
                 />
               ) : (
                 <div

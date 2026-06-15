@@ -35,6 +35,8 @@ interface PosterPreviewProps {
   /** enables drag-to-move of the logo, headline and CTA */
   editable?: boolean;
   onOffsetsChange?: (offsets: PosterOffsets) => void;
+  /** optional photo to use as poster background (base64 data URL or remote URL) */
+  backgroundImage?: string;
 }
 
 /**
@@ -53,6 +55,7 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
       offsets = EMPTY_OFFSETS,
       editable = false,
       onOffsetsChange,
+      backgroundImage,
     },
     ref,
   ) {
@@ -141,7 +144,9 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
         style={{
           width,
           height,
-          background: `linear-gradient(155deg, ${palette.background} 0%, ${palette.primary}33 60%, ${palette.secondary}55 100%)`,
+          background: backgroundImage
+            ? "#000"
+            : `linear-gradient(155deg, ${palette.background} 0%, ${palette.primary}33 60%, ${palette.secondary}55 100%)`,
           color: palette.text,
           fontFamily: fontStack(brand.fontBody),
           position: "relative",
@@ -153,32 +158,64 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
           boxSizing: "border-box",
         }}
       >
-        {/* decorative glow */}
-        <div
-          style={{
-            position: "absolute",
-            width: u * 70,
-            height: u * 70,
-            borderRadius: "50%",
-            right: -u * 20,
-            top: -u * 15,
-            background: `radial-gradient(circle, ${palette.primary}aa, transparent 70%)`,
-            filter: "blur(2px)",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            width: u * 55,
-            height: u * 55,
-            borderRadius: "50%",
-            left: -u * 18,
-            bottom: u * 10,
-            background: `radial-gradient(circle, ${palette.secondary}88, transparent 70%)`,
-          }}
-        />
+        {/* user-uploaded background photo */}
+        {backgroundImage && (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={backgroundImage}
+              alt=""
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                objectPosition: "center",
+                zIndex: 0,
+              }}
+            />
+            {/* dark overlay for readability */}
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                background: "linear-gradient(160deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.45) 100%)",
+                zIndex: 1,
+              }}
+            />
+          </>
+        )}
+        {/* decorative glow — hidden when using a photo background */}
+        {!backgroundImage && (
+          <>
+            <div
+              style={{
+                position: "absolute",
+                width: u * 70,
+                height: u * 70,
+                borderRadius: "50%",
+                right: -u * 20,
+                top: -u * 15,
+                background: `radial-gradient(circle, ${palette.primary}aa, transparent 70%)`,
+                filter: "blur(2px)",
+              }}
+            />
+            <div
+              style={{
+                position: "absolute",
+                width: u * 55,
+                height: u * 55,
+                borderRadius: "50%",
+                left: -u * 18,
+                bottom: u * 10,
+                background: `radial-gradient(circle, ${palette.secondary}88, transparent 70%)`,
+              }}
+            />
+          </>
+        )}
 
-        {/* header: logo / brand name */}
+        {/* header: logo / brand name — above overlay */}
         <div
           {...(() => {
             const hp = handleProps("logo");
@@ -186,6 +223,7 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
               ...hp,
               style: {
                 position: "relative" as const,
+                zIndex: 2,
                 display: "flex",
                 alignItems: "center",
                 gap: u * 2.5,
@@ -258,7 +296,7 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
             const hp = handleProps("headline");
             return {
               ...hp,
-              style: { position: "relative" as const, ...hp.style },
+              style: { position: "relative" as const, zIndex: 2, ...hp.style },
             };
           })()}
         >
@@ -297,6 +335,7 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
               ...hp,
               style: {
                 position: "relative" as const,
+                zIndex: 2,
                 display: "flex",
                 alignItems: "center",
                 gap: u * 3,
