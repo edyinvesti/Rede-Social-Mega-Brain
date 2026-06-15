@@ -43,6 +43,7 @@ export interface CopyResult {
   caption: string;
   hashtags: string[];
   source: "ai" | "stub";
+  backgroundPrompt?: string;
 }
 
 const OBJECTIVE_CTA: Record<string, string> = {
@@ -75,20 +76,12 @@ const NETWORK_CAPTION_STYLE: Record<SocialNetwork, string> = {
     "Pinterest: descrição inspiradora e descritiva, rica em palavras-chave de busca, foco em ideias e dicas.",
 };
 
-/** Sensible default hashtags per objective, used by the demo/stub mode. */
-const OBJECTIVE_HASHTAGS: Record<string, string[]> = {
-  vendas: ["oferta", "promocao", "compreonline"],
-  autoridade: ["dicas", "especialista", "conteudo"],
-  engajamento: ["comunidade", "vempraca", "interaja"],
-  leads: ["novidade", "saibamais", "cadastrese"],
-  trafego: ["linknabio", "acesseja", "saibamais"],
-};
-
 export type AiProvider = "gemini" | "openai" | null;
 
 const SYSTEM_PROMPT =
   "Você é um redator publicitário especialista em conteúdo para redes sociais no Brasil. " +
-  "Escreva textos curtos, persuasivos e com português impecável. " +
+  "Escreva textos ULTRA-PERSUASIVOS, focados em conversão e vendas. " +
+  "Use gatilhos mentais (escassez, urgência, prova social). " +
   "Responda SEMPRE em JSON válido.";
 
 /** Returns which provider will be used based on configured env vars. */
@@ -99,23 +92,32 @@ export function activeProvider(): AiProvider {
 }
 
 function buildPrompt(req: CopyRequest): string {
-  return `Crie o texto de um post (${req.formatName}) sobre o tema: "${req.topic}".
+  const objectivePush = {
+    vendas: "Foco: GATILHO DE VENDA IMEDIATA - mostre benefício + escassez + urgência",
+    autoridade: "Foco: GATILHO DE AUTORIDADE - mostre expertise + cases + diferencial",
+    engajamento: "Foco: GATILHO DE INTERAÇÃO - pergunta + desafio + convite para comentar",
+    leads: "Foco: GATILHO DE CURIOSIDADE + VALOR GRATUITO - ofereça algo de valor",
+    trafego: "Foco: GATILHO DE TRÁFEGO - conteúdo viralizável + CTA forte",
+  }[req.brand.objective] || "Foco: CONVERSÃO MÁXIMA";
+
+  return `Crie o texto de um post COMERCIAL (${req.formatName}) sobre o tema: "${req.topic}".
 Marca: ${req.brand.brandName}
 Descrição da marca: ${req.brand.brandDescription}
 Objetivo: ${req.brand.objective}
 Público-alvo: ${req.brand.audience}
 Tom de voz: ${req.brand.toneOfVoice}
+${objectivePush}
 
 Rede social de destino: ${NETWORK_LABELS[req.network]}
 Estilo da legenda para esta rede: ${NETWORK_CAPTION_STYLE[req.network]}
 
 Retorne um JSON com as chaves:
-- "headline": título principal curto (até 6 palavras)
-- "highlight": 1 a 2 palavras do título que devem ser destacadas em cor
-- "body": texto de apoio (até 220 caracteres)
-- "cta": chamada para ação curta
+- "headline": título POWERFUL curto (até 6 palavras) com gatilho mental
+- "highlight": 1 a 2 palavras do título que devem ser destacadas (use palavras que EXPLODEM conversão)
+- "body": texto de apoio PERSUASIVO (até 220 caracteres) com benefício principal
+- "cta": chamada para ação URGENTE e específico
 - "caption": legenda pronta para publicar na rede ${NETWORK_LABELS[req.network]}, no estilo descrito acima (não inclua as hashtags dentro da legenda)
-- "hashtags": array de 5 a 8 hashtags relevantes para o tema e a rede, sem o caractere "#" e sem espaços`;
+- "hashtags": array de 5 a 8 hashtags COMERCIAIS relevantes, sem o caractere "#" e sem espaços`;
 }
 
 function buildStub(req: CopyRequest): CopyResult {
@@ -143,6 +145,7 @@ function buildStub(req: CopyRequest): CopyResult {
     caption: `${headline} — ${body} ${cta}.`,
     hashtags: buildStubHashtags(req),
     source: "stub",
+    backgroundPrompt: "premium product photography studio, dramatic commercial lighting, smooth marble surface with subtle reflections, luxury aesthetic, clean minimal background, professional advertising style, 8k ultra detailed, soft gradient lighting, commercial product shot setup --ar 9:16",
   };
 }
 
@@ -159,7 +162,14 @@ function buildStubHashtags(req: CopyRequest): string[] {
     .map(slug)
     .filter((w) => w.length > 3)
     .slice(0, 3);
-  const base = OBJECTIVE_HASHTAGS[req.brand.objective] ?? ["conteudo"];
+  const commercialTags: Record<string, string[]> = {
+    vendas: ["promocao", "ofertaespecial", "compreagora", "liquidfy", "desconto"],
+    autoridade: ["expert", "dicasprofissionais", "conteudoexclusivo", "conhecimento"],
+    engajamento: ["comunidade", "engajamento", "compartilhe", "interaja"],
+    leads: ["cadastrese", "newsletter", "conteudogratis", "inscreva"],
+    trafego: ["linknaobi", "acesseoartigo", "conteudoexclusivo"],
+  };
+  const base = commercialTags[req.brand.objective] ?? ["conteudo", "inovacao"];
   return Array.from(
     new Set([...(brandTag ? [brandTag] : []), ...topicTags, ...base]),
   ).slice(0, 8);
@@ -187,6 +197,7 @@ function mergeWithStub(
     caption: parsed.caption?.trim() || stub.caption,
     hashtags: hashtags.length > 0 ? hashtags : stub.hashtags,
     source: "ai",
+    backgroundPrompt: parsed.backgroundPrompt?.trim() || stub.backgroundPrompt,
   };
 }
 
@@ -315,36 +326,46 @@ export interface CarouselRequest extends CopyRequest {
 }
 
 function buildCarouselPrompt(req: CarouselRequest): string {
-  return `Crie o roteiro de um CARROSSEL de ${req.slideCount} slides para ${NETWORK_LABELS[req.network]} sobre o tema: "${req.topic}".
+  const objectiveGuidance = {
+    vendas: "Foco em vendas - destaque benefícios, transformação e escassez",
+    autoridade: "Foco em autoridade - mostre expertise, cases de sucesso",
+    engajamento: "Foco em engajamento - use perguntas e chamadas para interação",
+    leads: "Foco em leads - valor educacional + conversão",
+    trafego: "Foco em tráfego - conteúdo viralizável com CTA forte",
+  }[req.brand.objective] || "Foco em conversão";
+
+  return `Crie o roteiro de um CARROSSEL VENDÁVEL de ${req.slideCount} slides para ${NETWORK_LABELS[req.network]} sobre o tema: "${req.topic}".
 Marca: ${req.brand.brandName}
 Descrição da marca: ${req.brand.brandDescription}
 Objetivo: ${req.brand.objective}
 Público-alvo: ${req.brand.audience}
 Tom de voz: ${req.brand.toneOfVoice}
+${objectiveGuidance}
 
 Regras do carrossel:
-- Slide 1 = capa com um gancho forte que faz parar de rolar.
-- Slides do meio = conteúdo de valor, um ponto por slide, fácil de ler.
-- Último slide = chamada para ação clara (${OBJECTIVE_CTA[req.brand.objective] ?? "engajar"}).
+- Slide 1 = capa GIGANTE com gancho que explode o scroll (máximo impacto)
+- Slides do meio = valor imediato, benefício claro, linguagem que faz o cliente pensar "quero"
+- Último slide = CTA URGENTE e específico (${OBJECTIVE_CTA[req.brand.objective] ?? "Garanta o seu agora"})
 
 Retorne um JSON com as chaves:
-- "slides": array com exatamente ${req.slideCount} itens, cada um com "title" (até 6 palavras) e "text" (até 160 caracteres)
+- "slides": array com exatamente ${req.slideCount} itens, cada um com "title" (até 6 palavras POWERFUL) e "text" (até 160 caracteres, foco em VENDA)
 - "caption": legenda pronta para publicar no estilo de ${NETWORK_LABELS[req.network]} (sem as hashtags)
-- "hashtags": array de 5 a 8 hashtags relevantes, sem o caractere "#" e sem espaços`;
+- "hashtags": array de 5 a 8 hashtags comerciais relevantes, sem o caractere "#" e sem espaços`;
 }
 
 function buildCarouselStub(req: CarouselRequest): CarouselResult {
   const base = buildStub(req);
   const slides: CarouselSlide[] = [];
+  const urgencyWords = ["IMPACTO", "TRANSFORMAÇÃO", "RESULTADO", "GARANTIA", "OFERTA"];
   for (let i = 0; i < req.slideCount; i++) {
     if (i === 0) {
-      slides.push({ title: base.headline, text: req.topic.trim() || base.body });
+      slides.push({ title: `${base.headline} - VOCÊ VAI AMAR!`, text: req.topic.trim() || base.body });
     } else if (i === req.slideCount - 1) {
-      slides.push({ title: "Bora começar?", text: base.cta });
+      slides.push({ title: `ÚLTIMA CHANCE!`, text: `Clique agora: ${base.cta} - Estoques limitados!` });
     } else {
       slides.push({
-        title: `Dica ${i}`,
-        text: base.body,
+        title: `${urgencyWords[i % urgencyWords.length]} Real`,
+        text: `Benefício ${i}: ${base.body}`,
       });
     }
   }
@@ -707,20 +728,30 @@ function buildImagePrompt(req: ImageCopyRequest): string {
   const topicHint = req.topic?.trim()
     ? `O usuário indica que o tema é: "${req.topic}". `
     : "";
-  return `${topicHint}Analise a imagem enviada e crie o texto de marketing de um post (${req.formatName}) para ${NETWORK_LABELS[req.network]}.
+  const objectivePush = {
+    vendas: "Foco: GATILHO DE VENDA - destaque o BENEFÍCIO principal do produto",
+    autoridade: "Foco: GATILHO DE QUALIDADE - mostre o diferencial técnico",
+    engajamento: "Foco: GATILHO DE DESEJO - crie apelo emocional forte",
+    leads: "Foco: GATILHO DE INTERESSE - destaque o valor agregado",
+    trafego: "Foco: GATILHO DE VIRALIZAÇÃO - destaque o que explode o scroll",
+  }[req.brand.objective] || "Foco: CONVERSÃO";
+
+  return `${topicHint}Analise a imagem enviada e crie o texto de marketing ULTRA-PERSUASIVO de um post (${req.formatName}) para ${NETWORK_LABELS[req.network]}.
 Marca: ${req.brand.brandName}
 Descrição da marca: ${req.brand.brandDescription}
 Objetivo: ${req.brand.objective}
 Público-alvo: ${req.brand.audience}
 Tom de voz: ${req.brand.toneOfVoice}
+${objectivePush}
 
 Com base no que você vê na imagem, retorne um JSON com as chaves:
-- "headline": título principal curto (até 6 palavras)
-- "highlight": 1 a 2 palavras do título que devem ser destacadas em cor
-- "body": texto de apoio (até 220 caracteres)
-- "cta": chamada para ação curta
+- "headline": título POWERFUL curto (até 6 palavras) que EXPLODA o scroll
+- "highlight": 1 a 2 palavras do título que devem ser destacadas (palavras-chave de conversão)
+- "body": texto PERSUASIVO (até 220 caracteres) com benefício + gatilho mental
+- "cta": chamada para ação URGENTE
 - "caption": legenda pronta para publicar em ${NETWORK_LABELS[req.network]} (sem hashtags)
-- "hashtags": array de 5 a 8 hashtags relevantes, sem "#" e sem espaços`;
+- "hashtags": array de 5 a 8 hashtags COMERCIAIS, sem "#" e sem espaços
+- "backgroundPrompt": um prompt SUPER detalhado em INGLÊS para uma imagem de fundo ULTRA-VENDÁVEL (estilo comercial profissional, estilo publicitário premium). O prompt deve descrever: 1) Cenário minimalista ou luxuoso que destaque o produto, 2) Iluminação profissional dramatic, 3) Textura em alta resolução (marble, metal, madeira, concreto, ou superfície premium), 4) Paleta de cores harmoniosa (brand colors), 5) Estilo fotográfico comercial --ar 9:16 para stories/post. Ex: "a luxury cosmetic studio with soft pastel lighting, glossy marble surface, golden reflections, professional product photography, ultra sharp focus, 8k resolution, commercial advertising style" ou "premium tech gadget on dark concrete with blue neon glow, dramatic studio lighting, professional commercial photography, cinematic, ultra detailed". NÃO inclua o produto - apenas o cenário de fundo.`;
 }
 
 async function imageWithGemini(

@@ -49,6 +49,8 @@ function CreatePageInner() {
   // New states for image upload
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [mimeType, setMimeType] = useState<string | null>(null);
+  const [isRemovingBg, setIsRemovingBg] = useState(false);
+  const [isGeneratingBg, setIsGeneratingBg] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const copyText = async (text: string, which: "caption" | "hashtags") => {
@@ -175,6 +177,27 @@ function CreatePageInner() {
       const copy = (await res.json()) as CopyResult;
       setOffsets(EMPTY_OFFSETS);
       setEditMode(false);
+
+      let finalBgUrl: string | undefined;
+      if (isImage && copy.backgroundPrompt) {
+        setIsGeneratingBg(true);
+        try {
+          const prompt = encodeURIComponent(copy.backgroundPrompt);
+          const bgUrl = `https://image.pollinations.ai/prompt/${prompt}?width=${format.width}&height=${format.height}&nologo=true`;
+          // Fetch as blob to embed natively so html-to-image works without CORS
+          const bgRes = await fetch(bgUrl);
+          const bgBlob = await bgRes.blob();
+          finalBgUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(bgBlob);
+          });
+        } catch (e) {
+          console.error("Failed to generate background", e);
+        }
+        setIsGeneratingBg(false);
+      }
+
       setPost({
         id: crypto.randomUUID(),
         formatId,
@@ -186,6 +209,9 @@ function CreatePageInner() {
         caption: copy.caption,
         hashtags: copy.hashtags,
         createdAt: Date.now(),
+        backgroundPrompt: copy.backgroundPrompt,
+        foregroundImage: isImage ? `data:${mimeType};base64,${imageBase64}` : undefined,
+        backgroundImage: finalBgUrl,
       });
     } catch {
       setError("Não foi possível gerar o conteúdo. Tente novamente.");
@@ -194,28 +220,38 @@ function CreatePageInner() {
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 8 * 1024 * 1024) {
       setError("A imagem deve ter no máximo 8MB.");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
-      if (result) {
-        // extract base64 data and mime type
-        const match = result.match(/^data:(image\/[a-z]+);base64,(.+)$/);
-        if (match) {
-          setMimeType(match[1]);
-          setImageBase64(match[2]);
+
+    setIsRemovingBg(true);
+    try {
+      const { removeBackground } = await import("@imgly/background-removal");
+      const objectUrl = URL.createObjectURL(file);
+      const transparentBlob = await removeBackground(objectUrl);
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        if (result) {
+          const match = result.match(/^data:(image\/[a-z]+);base64,(.+)$/);
+          if (match) {
+            setMimeType(match[1]);
+            setImageBase64(match[2]);
+          }
         }
-      }
-    };
-    reader.readAsDataURL(file);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+      };
+      reader.readAsDataURL(transparentBlob);
+    } catch (err) {
+      console.error(err);
+      setError("Erro ao processar e remover o fundo da imagem.");
+    } finally {
+      setIsRemovingBg(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -522,9 +558,10 @@ function CreatePageInner() {
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-surface py-4 text-sm font-medium transition hover:border-brand-2/50"
+                    disabled={isRemovingBg}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-surface py-4 text-sm font-medium transition hover:border-brand-2/50 disabled:opacity-50"
                   >
-                    Tirar foto ou escolher da galeria
+                    {isRemovingBg ? "Recortando o fundo da foto com IA..." : "Tirar foto ou escolher da galeria"}
                   </button>
                   <p className="mt-2 text-center text-xs text-muted">
                     A IA vai ler a foto e criar o marketing por você.
@@ -574,18 +611,20 @@ function CreatePageInner() {
           <button
             type="button"
             onClick={generate}
-            disabled={loading}
+            disabled={loading || isRemovingBg || isGeneratingBg}
             className="brand-gradient mt-5 w-full rounded-xl px-6 py-3 text-sm font-semibold transition hover:opacity-90 disabled:opacity-50"
           >
-            {loading
-              ? isCarousel
-                ? "Gerando carrossel..."
-                : "Gerando..."
-              : imageBase64
-                ? "✨ Analisar imagem com IA"
-                : isCarousel
-                  ? "✨ Gerar carrossel com IA"
-                  : "✨ Gerar com IA"}
+            {isGeneratingBg 
+              ? "Gerando cenário com IA..."
+              : loading
+                ? isCarousel
+                  ? "Gerando carrossel..."
+                  : "Gerando textos..."
+                : imageBase64
+                  ? "✨ Gerar cenário e texto com IA"
+                  : isCarousel
+                    ? "✨ Gerar carrossel com IA"
+                    : "✨ Gerar com IA"}
           </button>
         </div>
 
@@ -615,10 +654,7 @@ function CreatePageInner() {
                   offsets={offsets}
                   editable={editMode}
                   onOffsetsChange={setOffsets}
-                  backgroundImage={
-                    imageBase64 ? `data:${mimeType};base64,${imageBase64}` : undefined
-                  }
-                />
+                  />
               ) : (
                 <div
                   className="flex items-center justify-center rounded-lg border border-dashed border-border text-center text-sm text-muted"

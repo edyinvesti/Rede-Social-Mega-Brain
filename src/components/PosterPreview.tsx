@@ -119,6 +119,9 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
       };
     };
 
+    const hasImageBackground = Boolean(backgroundImage || post.backgroundImage);
+    const hasForegroundImage = Boolean(post.foregroundImage);
+
     const renderHeadline = () => {
       const headline = post.headline;
       const highlight = post.highlight?.trim();
@@ -144,7 +147,7 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
         style={{
           width,
           height,
-          background: backgroundImage
+          background: (backgroundImage || post.backgroundImage)
             ? "#000"
             : `linear-gradient(155deg, ${palette.background} 0%, ${palette.primary}33 60%, ${palette.secondary}55 100%)`,
           color: palette.text,
@@ -158,12 +161,12 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
           boxSizing: "border-box",
         }}
       >
-        {/* user-uploaded background photo */}
-        {backgroundImage && (
+        {/* user-uploaded background photo or AI generated background */}
+        {(backgroundImage || post.backgroundImage) && (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={backgroundImage}
+              src={post.backgroundImage || backgroundImage}
               alt=""
               style={{
                 position: "absolute",
@@ -175,19 +178,52 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
                 zIndex: 0,
               }}
             />
-            {/* dark overlay for readability */}
+            {/* dynamic overlay for readability based on whether we have a foreground product */}
             <div
               style={{
                 position: "absolute",
                 inset: 0,
-                background: "linear-gradient(160deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.45) 100%)",
+                background: post.foregroundImage 
+                  ? "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 35%, rgba(0,0,0,0.05) 62%, rgba(0,0,0,0.75) 100%)"
+                  : "linear-gradient(160deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.45) 100%)",
                 zIndex: 1,
               }}
             />
           </>
         )}
+
+        {/* AI cut-out product image */}
+        {post.foregroundImage && (
+          <div
+            style={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              bottom: hasImageBackground ? `${u * 2}px` : 0,
+              top: hasImageBackground ? "55%" : 0,
+              zIndex: hasImageBackground ? 1 : 2,
+              display: "flex",
+              alignItems: "flex-end",
+              justifyContent: "center",
+              pointerEvents: "none",
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={post.foregroundImage}
+              alt="Produto"
+              style={{
+                maxWidth: hasImageBackground ? "76%" : "80%",
+                maxHeight: hasImageBackground ? "42%" : "60%",
+                objectFit: "contain",
+                filter: "drop-shadow(0 20px 30px rgba(0,0,0,0.5))",
+              }}
+            />
+          </div>
+        )}
+
         {/* decorative glow — hidden when using a photo background */}
-        {!backgroundImage && (
+        {!(backgroundImage || post.backgroundImage) && (
           <>
             <div
               style={{
@@ -296,7 +332,18 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
             const hp = handleProps("headline");
             return {
               ...hp,
-              style: { position: "relative" as const, zIndex: 2, ...hp.style },
+              style: {
+                position: "relative" as const,
+                zIndex: 3,
+                marginTop: hasImageBackground && hasForegroundImage ? u * 1 : 0,
+                marginBottom: hasImageBackground && hasForegroundImage ? u * 52 : 0,
+                maxWidth: "92%",
+                padding: hasImageBackground ? `${u * 4}px` : 0,
+                borderRadius: hasImageBackground ? `${u * 5}px` : 0,
+                background: hasImageBackground ? "rgba(0,0,0,0.22)" : "transparent",
+                backdropFilter: hasImageBackground ? "blur(2px)" : undefined,
+                ...hp.style,
+              },
             };
           })()}
         >
@@ -335,7 +382,7 @@ export const PosterPreview = forwardRef<HTMLDivElement, PosterPreviewProps>(
               ...hp,
               style: {
                 position: "relative" as const,
-                zIndex: 2,
+                zIndex: 3,
                 display: "flex",
                 alignItems: "center",
                 gap: u * 3,

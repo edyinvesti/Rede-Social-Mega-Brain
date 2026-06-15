@@ -92,4 +92,10 @@ export interface GeneratedPost {
   hashtags?: string[];
   offsets?: PosterOffsets;
   createdAt: number;
+  /** English prompt describing the scene for AI image generation */
+  backgroundPrompt?: string;
+  /** Cut-out product image (base64) */
+  foregroundImage?: string;
+  /** AI Generated background image (base64) */
+  backgroundImage?: string;
 }
