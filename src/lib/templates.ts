@@ -119,3 +119,56 @@ export const TEMPLATE_NICHES: TemplateNiche[] = [
     ],
   },
 ];
+
+/** Background scene templates for different niches - AI generates perfect backdrops */
+export interface BackgroundTemplate {
+  id: string;
+  label: string;
+  emoji: string;
+  prompt: string;
+}
+
+export const BACKGROUND_TEMPLATES: BackgroundTemplate[] = [
+  {
+    id: "luxury-product",
+    label: "Produto Premium",
+    emoji: "✨",
+    prompt: "a luxury product studio with dramatic spotlight lighting, glossy black marble surface, golden reflections, premium commercial photography setup, 8k ultra detailed, clean minimalist background, professional advertising style --ar 9:16",
+  },
+  {
+    id: "lifestyle",
+    label: "Lifestyle Natural",
+    emoji: "🌅",
+    prompt: "a bright lifestyle scene with natural soft lighting, clean white background with subtle shadows, organic textures, airy atmosphere, professional content creation setup, commercial photography --ar 9:16",
+  },
+  {
+    id: "fitness-studio",
+    label: "Academia",
+    emoji: "💪",
+    prompt: "a modern gym interior with blue neon lighting, concrete walls, dramatic sports photography style, energetic atmosphere, premium fitness brand aesthetic, commercial workout setup --ar 9:16",
+  },
+  {
+    id: "beauty-flatlay",
+    label: "Flatlay Beleza",
+    emoji: "💄",
+    prompt: "a beauty flatlay setup with soft pastel lighting, marble vanity surface, cosmetic props, elegant cosmetics background, boutique aesthetic, commercial beauty photography --ar 9:16",
+  },
+  {
+    id: "food-studio",
+    label: "Gastronomia",
+    emoji: "🍽️",
+    prompt: "a professional food photography studio with warm golden lighting, rustic wooden table, subtle shadows, gourmet restaurant aesthetic, commercial food branding setup --ar 9:16",
+  },
+  {
+    id: "fashion-retro",
+    label: "Moda Urbana",
+    emoji: "👗",
+    prompt: "urban fashion scene with trendy street backdrop, soft pink and blue gradient lighting, concrete wall with street art, modern editorial style, commercial fashion shoot --ar 9:16",
+  },
+  {
+    id: "tech-neon",
+    label: "Tecnologia",
+    emoji: "💻",
+    prompt: "a tech product studio with futuristic blue purple neon lighting, dark concrete surface, digital glow effects, modern technology aesthetic, commercial gadget photography --ar 9:16",
+  },
+];

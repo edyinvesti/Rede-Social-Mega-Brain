@@ -12,7 +12,7 @@ import {
 } from "@/components/PosterPreview";
 import { useBrand } from "@/lib/brand-context";
 import { FORMATS, getFormat } from "@/lib/formats";
-import { TEMPLATE_NICHES } from "@/lib/templates";
+import { TEMPLATE_NICHES, BACKGROUND_TEMPLATES } from "@/lib/templates";
 import type {
   CopyResult,
   CarouselResult,
@@ -51,6 +51,7 @@ function CreatePageInner() {
   const [mimeType, setMimeType] = useState<string | null>(null);
   const [isRemovingBg, setIsRemovingBg] = useState(false);
   const [isGeneratingBg, setIsGeneratingBg] = useState(false);
+  const [bgTemplateId, setBgTemplateId] = useState<string>("luxury-product");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const copyText = async (text: string, which: "caption" | "hashtags") => {
@@ -182,16 +183,19 @@ function CreatePageInner() {
       if (isImage && copy.backgroundPrompt) {
         setIsGeneratingBg(true);
         try {
-          const prompt = encodeURIComponent(copy.backgroundPrompt);
-          const bgUrl = `https://image.pollinations.ai/prompt/${prompt}?width=${format.width}&height=${format.height}&nologo=true`;
-          // Fetch as blob to embed natively so html-to-image works without CORS
-          const bgRes = await fetch(bgUrl);
-          const bgBlob = await bgRes.blob();
-          finalBgUrl = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.readAsDataURL(bgBlob);
-          });
+          const bgTemplate = BACKGROUND_TEMPLATES.find(t => t.id === bgTemplateId);
+          const prompt = encodeURIComponent(bgTemplate?.prompt || copy.backgroundPrompt);
+          if (prompt) {
+            const bgUrl = `https://image.pollinations.ai/prompt/${prompt}?width=${format.width}&height=${format.height}&nologo=true`;
+            // Fetch as blob to embed natively so html-to-image works without CORS
+            const bgRes = await fetch(bgUrl);
+            const bgBlob = await bgRes.blob();
+            finalBgUrl = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.readAsDataURL(bgBlob);
+            });
+          }
         } catch (e) {
           console.error("Failed to generate background", e);
         }
@@ -569,6 +573,28 @@ function CreatePageInner() {
                 </>
               )}
             </div>
+
+            {imageBase64 && (
+              <div className="mt-4">
+                <p className="mb-2 text-sm font-medium">🎨 Estilo do fundo (IA)</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {BACKGROUND_TEMPLATES.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setBgTemplateId(t.id)}
+                      className={`rounded-lg border p-2 text-left text-xs transition ${
+                        bgTemplateId === t.id
+                          ? "border-brand bg-brand/10"
+                          : "border-border bg-surface-2 hover:border-brand-2/50"
+                      }`}
+                    >
+                      <span className="font-medium">{t.emoji} {t.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <label className="block space-y-2">
               <span className="text-sm font-medium">
