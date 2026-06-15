@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, forwardRef } from "react";
+import { useState, useRef } from "react";
 import { toPng } from "html-to-image";
 
 interface BrandIdentity {
@@ -55,15 +55,8 @@ export default function BestContentPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canvasRefs = useRef<Record<string, HTMLDivElement | null>>({
-    clean: null,
-    tropical: null,
-    premium: null,
-    cleanStory: null,
-    tropicalStory: null,
-    premiumStory: null,
-  });
-
+  const feedRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const storyRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -78,12 +71,10 @@ export default function BestContentPage() {
         const mimeType = match[1];
         const base64 = match[2];
 
-        // Remove background with AI
         try {
           const { removeBackground } = await import("@imgly/background-removal");
           const objectUrl = URL.createObjectURL(file);
           const transparentBlob = await removeBackground(objectUrl);
-
           const reader2 = new FileReader();
           reader2.onload = () => {
             const result2 = reader2.result as string;
@@ -112,7 +103,6 @@ export default function BestContentPage() {
     setError(null);
 
     try {
-      // Try Anthropic API
       const res = await fetch("/api/bestcontent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -132,15 +122,14 @@ export default function BestContentPage() {
         const data = await res.json();
         setVariations(data.variations);
       } else {
-        // Fallback to stubs
         setVariations([
           {
             id: "clean",
             style: "clean",
             headline: `${brand.productName || "Produto"} Clean`,
-            body: `Clean e minimal da ${brand.brandName || "marca"}. Qualidade em cada detalhe.`,
+            body: `Clean da ${brand.brandName || "marca"}. Qualidade premium.`,
             cta: "Compre agora",
-            caption: `✨ ${brand.productName || "Produto"} clean da ${brand.brandName || "marca"}. #clean #minimal`,
+            caption: `✨ ${brand.productName || "Produto"} clean`,
             hashtags: ["clean", "minimal", "quality", "brand"],
             metaAdsCopy: "Produto premium. Qualidade garantida.",
           },
@@ -148,39 +137,39 @@ export default function BestContentPage() {
             id: "tropical",
             style: "tropical",
             headline: `${brand.productName || "PRODUTO"} TROPICAL`,
-            body: `🔥 ${brand.brandName || "Marca"} explosão de cores!`,
+            body: `🔥 ${brand.brandName || "Marca"} explosão!`,
             cta: "Vem pra festa!",
-            caption: `💥 ${brand.productName || "Produto"} BOMBA! Só hoje! #tropical #vibes`,
+            caption: `💥 ${brand.productName || "Produto"} BOMBA!`,
             hashtags: ["tropical", "vibes", "colorido", "trend"],
-            metaAdsCopy: "Energia tropical! Peça já o seu!",
+            metaAdsCopy: "Energia tropical!",
           },
           {
             id: "premium",
             style: "premium",
             headline: `${brand.productName || "Produto"} Luxo`,
-            body: `Exclusividade ${brand.brandName || "marca"}. Para quem merece o melhor.`,
-            cta: "Garanta sua edição limitada",
-            caption: `👑 ${brand.productName || "Produto"} PREMIUM. Luxo que você merece.`,
-            hashtags: ["luxo", "premium", "exclusivo", "sofisticado"],
-            metaAdsCopy: "Versão premium limitada. Aproveite!",
+            body: `Exclusividade ${brand.brandName || "marca"}.`,
+            cta: "Garanta limitada",
+            caption: `👑 ${brand.productName || "Produto"} PREMIUM.`,
+            hashtags: ["luxo", "premium", "exclusivo"],
+            metaAdsCopy: "Versão premium limitada.",
           },
         ]);
       }
     } catch (err) {
       console.error(err);
-      setError("Erro ao gerar criativos. Tente novamente.");
+      setError("Erro ao gerar criativos.");
     } finally {
       setLoading(false);
       setStep("result");
     }
   };
 
-  const downloadCanvas = async (key: string) => {
-    const node = canvasRefs.current[key];
+  const downloadCanvas = async (key: string, type: "feed" | "story") => {
+    const node = type === "feed" ? feedRefs.current[key] : storyRefs.current[key];
     if (!node) return;
     const dataUrl = await toPng(node, { quality: 0.95 });
     const link = document.createElement("a");
-    link.download = `bestcontent-${key}.png`;
+    link.download = `bestcontent-${key}-${type}.png`;
     link.href = dataUrl;
     link.click();
   };
@@ -192,7 +181,7 @@ export default function BestContentPage() {
 
   return (
     <main className="min-h-screen bg-dark-900 text-white p-4">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         <h1 className="text-3xl font-bold text-center mb-8">BestContent AI</h1>
 
         {step === "upload" && (
@@ -211,7 +200,7 @@ export default function BestContentPage() {
             >
               <div className="text-6xl mb-4">📷</div>
               <p className="text-lg font-bold text-brand-2">Toque para tirar foto ou escolher da galeria</p>
-              <p className="text-sm text-muted mt-2">A IA vai transformar sua foto em criativo profissional</p>
+              <p className="text-sm text-muted mt-2">A IA transforma sua foto em criativo profissional</p>
             </button>
           </div>
         )}
@@ -228,8 +217,6 @@ export default function BestContentPage() {
               </div>
             )}
 
-        {step === "form" && (
-          <div className="grid gap-6 max-w-xl mx-auto">
             <div>
               <label className="block text-sm font-medium mb-2">Nome da Marca</label>
               <input
@@ -251,7 +238,7 @@ export default function BestContentPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2">Descrição do Produto</label>
+              <label className="block text-sm font-medium mb-2">Descrição</label>
               <textarea
                 value={brand.productDescription}
                 onChange={(e) => setBrand({ ...brand, productDescription: e.target.value })}
@@ -282,9 +269,7 @@ export default function BestContentPage() {
                     key={t.value}
                     onClick={() => setBrand({ ...brand, toneOfVoice: t.value })}
                     className={`rounded-lg px-3 py-2 text-sm ${
-                      brand.toneOfVoice === t.value
-                        ? "bg-brand text-white"
-                        : "bg-dark-800 border border-dark-700"
+                      brand.toneOfVoice === t.value ? "bg-brand text-white" : "bg-dark-800 border border-dark-700"
                     }`}
                   >
                     {t.label}
@@ -317,59 +302,74 @@ export default function BestContentPage() {
           <div className="grid gap-8">
             <h2 className="text-2xl font-bold text-center">Seus criativos estão prontos!</h2>
 
-            <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid md:grid-cols-3 gap-6">
               {variations.map((v) => (
                 <div key={v.style} className="space-y-4">
                   <h3 className="text-lg font-semibold capitalize text-center">{v.style}</h3>
-                  
-                  <CreativeCanvas
-                    ref={(el) => { canvasRefs.current[v.style] = el; }}
-                    imageBase64={imageBase64}
-                    mimeType={mimeType}
-                    variation={v}
-                    brand={brand}
-                    width={1080}
-                    height={1080}
-                  />
-                  
-                  <CreativeCanvas
-                    ref={(el) => { canvasRefs.current[v.style + "Story"] = el; }}
-                    imageBase64={imageBase64}
-                    mimeType={mimeType}
-                    variation={v}
-                    brand={brand}
-                    width={1080}
-                    height={1920}
-                  />
 
-                  <button
-                    onClick={() => downloadCanvas(v.style)}
-                    className="w-full rounded-lg bg-brand py-2 text-sm font-medium"
+                  <div
+                    ref={(el) => { feedRefs.current[v.style] = el; }}
+                    className="rounded-lg overflow-hidden mx-auto"
+                    style={{
+                      width: 300,
+                      height: 300,
+                      background: v.style === "clean" ? "#FFFFFF" :
+                        v.style === "tropical" ? "linear-gradient(135deg, #34d399, #22d3ee, #facc15)" :
+                        "linear-gradient(135deg, #111827, #000000, #78350f)",
+                      position: "relative",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
                   >
-                    Baixar Feed {v.style}
-                  </button>
-                  <button
-                    onClick={() => downloadCanvas(v.style + "Story")}
-                    className="w-full rounded-lg bg-dark-700 py-2 text-sm font-medium"
+                    <CreativeContent imageBase64={imageBase64} mimeType={mimeType} variation={v} brand={brand} />
+                  </div>
+
+                  <div
+                    ref={(el) => { storyRefs.current[v.style] = el; }}
+                    className="rounded-lg overflow-hidden mx-auto"
+                    style={{
+                      width: 169,
+                      height: 300,
+                      background: v.style === "clean" ? "#FFFFFF" :
+                        v.style === "tropical" ? "linear-gradient(135deg, #34d399, #22d3ee, #facc15)" :
+                        "linear-gradient(135deg, #111827, #000000, #78350f)",
+                      position: "relative",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
                   >
-                    Baixar Story {v.style}
-                  </button>
+                    <CreativeContent imageBase64={imageBase64} mimeType={mimeType} variation={v} brand={brand} story />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => downloadCanvas(v.style, "feed")}
+                      className="rounded-lg bg-brand py-2 text-xs font-medium"
+                    >
+                      Feed
+                    </button>
+                    <button
+                      onClick={() => downloadCanvas(v.style, "story")}
+                      className="rounded-lg bg-dark-700 py-2 text-xs font-medium"
+                    >
+                      Story
+                    </button>
+                  </div>
 
                   <button
                     onClick={() => copyText(v.caption, v.hashtags)}
-                    className="w-full rounded-lg border border-brand/50 py-2 text-sm font-medium text-brand-2"
+                    className="w-full rounded-lg border border-brand/50 py-2 text-xs font-medium text-brand-2"
                   >
-                    Copiar legenda + hashtags
+                    Copiar legenda
                   </button>
                 </div>
               ))}
             </div>
 
             <div className="text-center">
-              <button
-                onClick={() => setStep("upload")}
-                className="rounded-lg bg-dark-700 px-6 py-2"
-              >
+              <button onClick={() => setStep("upload")} className="rounded-lg bg-dark-700 px-6 py-2">
                 Começar novamente
               </button>
             </div>
@@ -380,151 +380,64 @@ export default function BestContentPage() {
   );
 }
 
-interface CreativeCanvasProps {
-  imageBase64: string | null;
-  mimeType: string | null;
-  variation: Variation;
-  brand: BrandIdentity;
-  width: number;
-  height: number;
-}
-
-const CreativeCanvas = forwardRef<HTMLDivElement, CreativeCanvasProps>(
-  ({ imageBase64, mimeType, variation, brand, width, height }, ref) => {
-    const ratio = width / height;
-    const scale = 300 * ratio;
-
-    const getBackgroundStyle = () => {
-      switch (variation.style) {
-        case "clean":
-          return { background: "#FFFFFF" };
-        case "tropical":
-          return { background: "linear-gradient(135deg, #34d399, #22d3ee, #facc15)" };
-        case "premium":
-          return { background: "linear-gradient(135deg, #111827, #000000, #78350f)" };
-        default:
-          return { background: "#1f2937" };
-      }
-    };
-
-    return (
-      <div
-        ref={ref}
-        className="rounded-lg overflow-hidden"
-        style={{ width: scale, height: 300, ...getBackgroundStyle() }}
-      >
-        <div
+function CreativeContent({ imageBase64, mimeType, variation, brand, story }: any) {
+  return (
+    <>
+      {imageBase64 && mimeType && (
+        <img
+          src={`data:${mimeType};base64,${imageBase64}`}
+          alt="Produto"
           style={{
-            width,
-            height,
-            position: "relative",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
+            maxWidth: story ? "60%" : "70%",
+            maxHeight: story ? "60%" : "70%",
+            objectFit: "contain",
+            filter: "drop-shadow(0 20px 30px rgba(0,0,0,0.4))",
+          }}
+        />
+      )}
+
+      <div
+        style={{
+          position: "absolute",
+          bottom: story ? 10 : 16,
+          left: story ? 10 : 16,
+          right: story ? 10 : 16,
+          textAlign: "center",
+        }}
+      >
+        <h1
+          style={{
+            fontWeight: 700,
+            fontSize: story ? 16 : 20,
+            color: variation.style === "clean" ? "#1a1a1a" : "white",
+            marginBottom: 2,
           }}
         >
-          {imageBase64 && mimeType && (
-            <img
-              src={`data:${mimeType};base64,${imageBase64}`}
-              alt="Produto"
-              style={{
-                maxWidth: "70%",
-                maxHeight: "70%",
-                objectFit: "contain",
-                filter:
-                  variation.style === "premium"
-                    ? "drop-shadow(0 0 30px rgba(255,215,0,0.5))"
-                    : variation.style === "tropical"
-                    ? "drop-shadow(0 10px 20px rgba(0,0,0,0.3))"
-                    : "drop-shadow(0 20px 30px rgba(0,0,0,0.4))",
-              }}
-            />
-          )}
-
-          {variation.style === "tropical" && (
-            <svg
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
-            >
-              <circle cx="20%" cy="30%" r="50" fill="rgba(255,255,255,0.2)" />
-              <circle cx="80%" cy="70%" r="80" fill="rgba(255,255,255,0.15)" />
-              <ellipse cx="50%" cy="50%" rx="100" ry="60" fill={brand.primaryColor} opacity="0.3" />
-            </svg>
-          )}
-
-          {variation.style === "premium" && (
-            <>
-              <div
-                style={{
-                  position: "absolute",
-                  top: "10px",
-                  right: "10px",
-                  width: "40px",
-                  height: "40px",
-                  border: "2px solid rgba(255,215,0,0.3)",
-                  borderRadius: "50%",
-                }}
-              />
-              <div
-                style={{
-                  position: "absolute",
-                  bottom: "40px",
-                  left: "20px",
-                  width: "32px",
-                  height: "32px",
-                  border: "1px solid rgba(255,215,0,0.2)",
-                }}
-              />
-            </>
-          )}
-
-          <div
-            style={{
-              position: "absolute",
-              bottom: "16px",
-              left: "16px",
-              right: "16px",
-              textAlign: "center",
-            }}
-          >
-            <h1
-              style={{
-                fontWeight: 700,
-                marginBottom: "2px",
-                color: variation.style === "clean" ? "#1a1a1a" : "white",
-                fontSize: "24px",
-                fontFamily: variation.style === "premium" ? "serif" : "sans-serif",
-              }}
-            >
-              {variation.headline}
-            </h1>
-            <p
-              style={{
-                fontSize: "14px",
-                opacity: 0.9,
-                color:
-                  variation.style === "clean"
-                    ? "#444"
-                    : "rgba(255,255,255,0.9)",
-              }}
-            >
-              {variation.body}
-            </p>
-            <button
-              style={{
-                marginTop: "8px",
-                padding: "4px 16px",
-                borderRadius: "9999px",
-                fontSize: "12px",
-                fontWeight: 700,
-                background: brand.primaryColor,
-                color: "white",
-              }}
-            >
-              {variation.cta}
-            </button>
-          </div>
-        </div>
+          {variation.headline}
+        </h1>
+        <p
+          style={{
+            fontSize: story ? 11 : 14,
+            opacity: 0.9,
+            color: variation.style === "clean" ? "#444" : "rgba(255,255,255,0.9)",
+          }}
+        >
+          {variation.body}
+        </p>
+        <button
+          style={{
+            marginTop: story ? 2 : 4,
+            padding: story ? "2px 8px" : "4px 12px",
+            borderRadius: 9999,
+            fontSize: story ? 10 : 12,
+            fontWeight: 700,
+            background: brand.primaryColor,
+            color: "white",
+          }}
+        >
+          {variation.cta}
+        </button>
       </div>
-    );
-  }
-);
+    </>
+  );
+}
