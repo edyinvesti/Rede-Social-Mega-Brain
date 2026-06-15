@@ -184,7 +184,8 @@ function CreatePageInner() {
         setIsGeneratingBg(true);
         try {
           const bgTemplate = BACKGROUND_TEMPLATES.find(t => t.id === bgTemplateId);
-          const prompt = encodeURIComponent(bgTemplate?.prompt || copy.backgroundPrompt);
+          const backgroundPrompt = bgTemplate?.prompt || copy.backgroundPrompt;
+          const prompt = backgroundPrompt ? encodeURIComponent(backgroundPrompt) : "";
           if (prompt) {
             const bgUrl = `https://image.pollinations.ai/prompt/${prompt}?width=${format.width}&height=${format.height}&nologo=true`;
             // Fetch as blob to embed natively so html-to-image works without CORS
@@ -200,12 +201,12 @@ function CreatePageInner() {
               reader.onerror = () => reject(new Error("FileReader error"));
               reader.readAsDataURL(bgBlob);
             });
+          } else {
+            throw new Error("No background prompt available");
           }
         } catch (e) {
           console.error("Failed to generate background", e);
-          // Fallback: use unsplash source
-          const unsplashUrl = `https://source.unsplash.com/random/${format.width}x${format.height}/?product,studio,commercial`;
-          finalBgUrl = unsplashUrl;
+          finalBgUrl = `https://via.placeholder.com/${format.width}x${format.height}/1a1a1a/ffffff?text=Marketing+Background`;
         }
         setIsGeneratingBg(false);
       }
