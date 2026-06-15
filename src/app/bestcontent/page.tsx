@@ -185,6 +185,11 @@ export default function BestContentPage() {
     link.click();
   };
 
+  const copyText = async (caption: string, hashtags: string[]) => {
+    const fullText = `${caption}\n\n${hashtags.map(h => `#${h}`).join(" ")}`;
+    await navigator.clipboard.writeText(fullText);
+  };
+
   return (
     <main className="min-h-screen bg-dark-900 text-white p-4">
       <div className="max-w-4xl mx-auto">
@@ -202,14 +207,26 @@ export default function BestContentPage() {
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="rounded-xl border-2 border-dashed border-gray-600 p-12 text-center hover:border-brand-2/50 transition"
+              className="rounded-xl border-2 border-dashed border-brand/50 bg-brand/5 p-12 text-center hover:bg-brand/10 transition"
             >
               <div className="text-6xl mb-4">📷</div>
-              <p className="text-lg font-medium">Toque para tirar foto ou escolher da galeria</p>
-              <p className="text-sm text-gray-400 mt-2">A IA vai transformar sua foto em criativo profissional</p>
+              <p className="text-lg font-bold text-brand-2">Toque para tirar foto ou escolher da galeria</p>
+              <p className="text-sm text-muted mt-2">A IA vai transformar sua foto em criativo profissional</p>
             </button>
           </div>
         )}
+
+        {step === "form" && (
+          <div className="grid gap-6 max-w-xl mx-auto">
+            {imageBase64 && mimeType && (
+              <div className="flex justify-center mb-4">
+                <img
+                  src={`data:${mimeType};base64,${imageBase64}`}
+                  alt="Preview"
+                  className="h-32 w-32 object-contain rounded-lg border-2 border-brand/30"
+                />
+              </div>
+            )}
 
         {step === "form" && (
           <div className="grid gap-6 max-w-xl mx-auto">
@@ -336,6 +353,13 @@ export default function BestContentPage() {
                     className="w-full rounded-lg bg-dark-700 py-2 text-sm font-medium"
                   >
                     Baixar Story {v.style}
+                  </button>
+
+                  <button
+                    onClick={() => copyText(v.caption, v.hashtags)}
+                    className="w-full rounded-lg border border-brand/50 py-2 text-sm font-medium text-brand-2"
+                  >
+                    Copiar legenda + hashtags
                   </button>
                 </div>
               ))}
