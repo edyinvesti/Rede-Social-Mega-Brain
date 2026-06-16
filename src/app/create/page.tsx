@@ -206,7 +206,23 @@ function CreatePageInner() {
           }
         } catch (e) {
           console.error("Failed to generate background", e);
-          finalBgUrl = `https://via.placeholder.com/${format.width}x${format.height}/1a1a1a/ffffff?text=Marketing+Background`;
+          // Try unsplash source as fallback
+          try {
+            const fallbackUrl = `https://source.unsplash.com/1080x1350/?product,studio,commercial`;
+            const fallbackRes = await fetch(fallbackUrl);
+            if (fallbackRes.ok) {
+              const fallbackBlob = await fallbackRes.blob();
+              finalBgUrl = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.readAsDataURL(fallbackBlob);
+              });
+            } else {
+              throw new Error("Unsplash failed");
+            }
+          } catch {
+            finalBgUrl = `https://placehold.co/1080x1350/1a1a1a/ffffff?text=AI+Background`;
+          }
         }
         setIsGeneratingBg(false);
       }
