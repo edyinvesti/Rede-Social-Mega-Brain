@@ -206,23 +206,8 @@ function CreatePageInner() {
           }
         } catch (e) {
           console.error("Failed to generate background", e);
-          // Try unsplash source as fallback
-          try {
-            const fallbackUrl = `https://source.unsplash.com/1080x1350/?product,studio,commercial`;
-            const fallbackRes = await fetch(fallbackUrl);
-            if (fallbackRes.ok) {
-              const fallbackBlob = await fallbackRes.blob();
-              finalBgUrl = await new Promise<string>((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.readAsDataURL(fallbackBlob);
-              });
-            } else {
-              throw new Error("Unsplash failed");
-            }
-          } catch {
-            finalBgUrl = `https://placehold.co/1080x1350/1a1a1a/ffffff?text=AI+Background`;
-          }
+          // Ultimate fallback - use Unsplash source directly
+          finalBgUrl = `https://images.unsplash.com/photo-1556742049-09b5b3b7d6d6?w=${format.width}&h=${format.height}&fit=crop&q=80`;
         }
         setIsGeneratingBg(false);
       }
